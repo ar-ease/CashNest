@@ -1,9 +1,33 @@
+"use client";
 import Link from "next/link";
-import React from "react";
+
+import React, { useEffect, useRef } from "react";
 import { Button } from "./ui/button";
 import Image from "next/image";
-
 const HeroSection = () => {
+  const imageRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const imageElement = imageRef.current;
+    if (!imageElement) return;
+
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      const scrollThreshold = 100;
+
+      if (scrollPosition > scrollThreshold) {
+        imageElement.classList.add("scrolled");
+      } else {
+        imageElement.classList.remove("scrolled");
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
   return (
     <div className="pb-28 px-4">
       <div className="container mx-auto text-center">
@@ -27,8 +51,8 @@ const HeroSection = () => {
             </Button>
           </Link>
         </div>
-        <div>
-          <div>
+        <div className="hero-image-wrapper">
+          <div ref={imageRef} className="hero-image">
             <Image
               src={"/banner.jpeg"}
               alt="dashboard preview"

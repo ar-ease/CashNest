@@ -120,4 +120,15 @@
   .gradient-title {
     @apply gradient font-extrabold pr-2 pb-2 tracking-tight text-transparent bg-clip-text;
   }
+  .hero-image-wrapper {
+    perspective: 1000px;
+  }
+  .hero-image {
+    transform: rotateX(15deg) scale(1);
+    transition: transform 0.5s ease-out;
+    will-change: transform;
+  }
+  .hero-image.scrolled {
+    transform: rotateX(0deg) scale(1) translateY(40px);
+  }
 }
