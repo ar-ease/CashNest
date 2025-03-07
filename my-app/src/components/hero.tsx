@@ -2,7 +2,7 @@
 import Link from "next/link";
 
 import React, { useEffect, useRef } from "react";
-import { Button } from "./ui/button";
+import { Button } from "@/components/ui/button";
 import Image from "next/image";
 const HeroSection = () => {
   const imageRef = useRef<HTMLDivElement | null>(null);

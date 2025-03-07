@@ -28,8 +28,81 @@ model User {
   
   @@map("users") 
 
-  }
+  } 
 model Account{
 
     id String @id @default(uuid())
+    name String 
+    type AccountType
+    balance Decimal @default(0)
+    isDefault Boolean @default(false)
+    userId String
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    transactions Transaction[]
+    createdAt DateTime @default(now())
+
+    @@index([userId])
+    @@map("accounts")
+  
+
+  }
+  enum AccountType{
+    CURRENT 
+    SAVINGS
+  }
+
+model Transaction{
+
+    id String @id @default(uuid())
+    type TransactionType
+    amount Decimal
+    description String
+    date DateTime
+    category String
+    receiptUrl String?
+    isRecurring Boolean @default(false)
+    recurringInterval RecurringInterval?
+    nextReccurenceDate DateTime?
+    lastProcessed DateTime?
+    status TransactionStatus @default(COMPLETED)
+    userId String
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    accointId String
+    accountId String
+    account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([userId])
+    @@index([accountId])
+    @@map("transactions")
+
+  }
+  enum TransactionType{
+    INCOME
+    EXPENSE
+  }
+  enum RecurringInterval{
+    DAILY
+    WEEKLY
+    MONTHLY
+    YEARLY
+  }
+  enum TransactionStatus{
+    COMPLETED
+    PENDING
+    CANCELLED
+  }
+model Budget{
+
+    id String @id @default(uuid())
+    amount Decimal
+    lastAlertSent DateTime?
+    userId String
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([userId])
+    @@map("budgets")
   }
