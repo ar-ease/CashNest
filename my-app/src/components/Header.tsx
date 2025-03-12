@@ -10,8 +10,10 @@ import Link from "next/link";
 import React from "react";
 import { Button } from "./ui/button";
 import { LayoutDashboard, PenBox } from "lucide-react";
+import { checkUser } from "@/lib/checkuser";
 
-export const Header = () => {
+export const Header = async () => {
+  await checkUser();
   console.log("hello there");
   return (
     <>
