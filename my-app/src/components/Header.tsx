@@ -14,7 +14,6 @@ import { checkUser } from "@/lib/checkuser";
 
 export const Header = async () => {
   await checkUser();
-  console.log("hello there");
   return (
     <>
       <div className="fixed top-0 w-full bg-white/80 backdrop-blur-md z-50 border-b">

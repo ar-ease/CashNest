@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { accountSchema } from "@/app/lib/scheema"; // Import from your schema file
@@ -21,7 +22,10 @@ import {
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-
+import { z } from "zod";
+import useFetch from "@/hooks/use-fetch";
+import { createAccount } from "@/actions/dashboard";
+import { Loader2 } from "lucide-react";
 const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -31,7 +35,7 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
     formState: { errors },
     setValue,
     watch,
-  } = useForm({
+  } = useForm<z.infer<typeof accountSchema>>({
     resolver: zodResolver(accountSchema),
     defaultValues: {
       name: "",
@@ -41,9 +45,28 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
     },
   });
 
+  const {
+    data: newAccount,
+    error,
+    fn: createAccountFn,
+    loading: createAccountLoading,
+  } = useFetch(createAccount);
+
+  useEffect(() => {
+    if (newAccount && !createAccountLoading) {
+      toast.success("Account created successfully");
+    }
+  }, [createAccountLoading, newAccount]);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error.message);
+    }
+  }, [error]);
+
   const onSubmit = async (data: any) => {
-    console.log(data);
     setIsOpen(false);
+    await createAccountFn(data);
   };
 
   return (
@@ -70,15 +93,17 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
                   Account type
                 </label>
                 <Select
-                  onValueChange={(value) => setValue("type", value)}
+                  onValueChange={(value) =>
+                    setValue("type", value as "CURRENT" | "SAVINGS")
+                  }
                   defaultValue={watch("type")}
                 >
                   <SelectTrigger id="type">
                     <SelectValue placeholder="select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="current">current</SelectItem>
-                    <SelectItem value="savings">Savings</SelectItem>
+                    <SelectItem value="CURRENT">current</SelectItem>
+                    <SelectItem value="SAVINGS">Savings</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors?.type && (
@@ -128,8 +153,19 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
                     Cancel
                   </Button>
                 </DrawerClose>
-                <Button type="submit" className="flex-1 ml-2">
-                  Create Account
+                <Button
+                  type="submit"
+                  className="flex-1 ml-2"
+                  disabled={createAccountLoading}
+                >
+                  {createAccountLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                      creating...
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
                 </Button>
               </div>
             </form>
