@@ -7,8 +7,7 @@ import AccountCard from "./_components/account-card";
 
 const DashboardPage = async () => {
   const accounts: Account[] = await getUserAccount();
-  console.log(accounts);
-
+  const accountsArray = Object.values(accounts);
   return (
     <div className="px-5">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -20,13 +19,14 @@ const DashboardPage = async () => {
             </CardContent>
           </Card>
         </CreateAccountDrawer>
-        {/* {accounts?.length > 0 ? (
-          accounts.map((account) => (
+
+        {accountsArray?.length > 0 ? (
+          accountsArray.map((account) => (
             <AccountCard key={account.id} account={account} />
           ))
         ) : (
           <p className="text-gray-500">No accounts found.</p>
-        )} */}
+        )}
       </div>
     </div>
   );

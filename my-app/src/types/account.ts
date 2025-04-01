@@ -1,9 +1,12 @@
-import { Decimal } from "@prisma/client/runtime/library";
-
 export interface Account {
   id: string;
   name: string;
-  type: "current" | "savings"; // Ensure these match
-  balance: number; // If using Prisma.Decimal, convert to number
+  type: "CURRENT" | "SAVINGS";
+  balance: number;
   isDefault: boolean;
+  userId: string;
+  createdAt: string;
+  _count?: {
+    transactions: number;
+  };
 }

@@ -3,18 +3,49 @@ import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 
-const serializeTransaction = (obj: any) => {
-  const serialized = { ...obj };
+// Helper to properly serialize Decimal objects and other non-serializable data
+const serializeTransaction = (data: any): any => {
+  // Handle arrays by mapping through them
+  if (Array.isArray(data)) {
+    return data.map((item) => serializeTransaction(item));
+  }
 
-  if (obj.balance) {
-    serialized.balance = obj.balance.toNumber();
+  // Handle single objects
+  if (data && typeof data === "object") {
+    const serialized = { ...data };
+
+    // Handle Decimal fields
+    if (data.balance && typeof data.balance.toNumber === "function") {
+      serialized.balance = data.balance.toNumber();
+    }
+
+    if (data.amount && typeof data.amount.toNumber === "function") {
+      serialized.amount = data.amount.toNumber();
+    }
+
+    // Handle dates
+    if (data.createdAt instanceof Date) {
+      serialized.createdAt = data.createdAt.toISOString();
+    }
+
+    // Recursively serialize nested objects
+    Object.keys(serialized).forEach((key) => {
+      if (
+        serialized[key] &&
+        typeof serialized[key] === "object" &&
+        !Array.isArray(serialized[key])
+      ) {
+        serialized[key] = serializeTransaction(serialized[key]);
+      } else if (Array.isArray(serialized[key])) {
+        serialized[key] = serializeTransaction(serialized[key]);
+      }
+    });
+
+    return serialized;
   }
-  if (obj.amount) {
-    serialized.balance = obj.balance.toNumber();
-  }
-  return serialized;
+
+  return data;
 };
-
 export async function createAccount(data: any) {
   try {
     const { userId } = await auth();
