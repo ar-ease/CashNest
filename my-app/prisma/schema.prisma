@@ -50,34 +50,30 @@ model Account{
     CURRENT 
     SAVINGS
   }
+model Transaction {
+  id String @id @default(uuid())
+  type TransactionType
+  amount Decimal
+  description String
+  date DateTime
+  category String
+  receiptUrl String?
+  isRecurring Boolean @default(false)
+  recurringInterval RecurringInterval?
+  nextReccurenceDate DateTime?
+  lastProcessed DateTime?
+  status TransactionStatus @default(COMPLETED)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String  // ✅ This is correct
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-model Transaction{
-
-    id String @id @default(uuid())
-    type TransactionType
-    amount Decimal
-    description String
-    date DateTime
-    category String
-    receiptUrl String?
-    isRecurring Boolean @default(false)
-    recurringInterval RecurringInterval?
-    nextReccurenceDate DateTime?
-    lastProcessed DateTime?
-    status TransactionStatus @default(COMPLETED)
-    userId String
-    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-    accointId String
-    accountId String
-    account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-
-    @@index([userId])
-    @@index([accountId])
-    @@map("transactions")
-
-  }
+  @@index([userId])
+  @@index([accountId])
+  @@map("transactions")
+}
   enum TransactionType{
     INCOME
     EXPENSE
