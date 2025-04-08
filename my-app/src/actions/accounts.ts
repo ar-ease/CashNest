@@ -55,7 +55,7 @@ export async function updateDefaultAccount(accountId: string) {
     return { success: false, error: (error as Error).message };
   }
 }
-export async function getAccountWithTransactions(accountId: any) {
+export async function getAccountWithTransactions(accountId: string) {
   const { userId } = await auth();
   if (!userId) throw new Error("User not found");
 
@@ -81,5 +81,15 @@ export async function getAccountWithTransactions(accountId: any) {
       },
     },
   });
-  return account || null;
+
+  if (!account) return null;
+
+  return {
+    ...account,
+    balance: account.balance,
+    transactions: account.transactions.map((t) => ({
+      ...t,
+      amount: t.amount.toNumber(), // <- convert Decimal to number
+    })),
+  };
 }

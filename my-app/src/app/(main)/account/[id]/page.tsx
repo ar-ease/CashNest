@@ -7,14 +7,16 @@ interface AccountPageProps {
   params: { id: string };
 }
 const AccountPage = async ({ params }: AccountPageProps) => {
-  const accountData = await getAccountWithTransactions(params.id);
+  const { id } = await params;
+  const accountData = await getAccountWithTransactions(id);
 
-  console.log(accountData);
+  // console.log(accountData);
   if (!accountData) {
     return notFound();
   }
 
   const { transactions, ...account } = accountData;
+  console.log(transactions);
 
   const { type, balance } = account;
 
