@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-
+import { useMemo } from "react";
 import {
   ChevronDown,
   Search,
@@ -76,7 +76,6 @@ const TransactionTable = ({
 }) => {
   const router = useRouter();
   console.log("transaction", transactions);
-  const filteredAndSortedTransactions = transactions;
 
   const deleteFn = (id: string) => {
     console.log("hello there");
@@ -98,6 +97,47 @@ const TransactionTable = ({
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
 
   const [recurringFilter, setRecurringFilter] = useState<string>("");
+
+  const filteredAndSortedTransactions = useMemo(() => {
+    let result = [...transactions];
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      result = result.filter((transaction) =>
+        transaction.description.toLowerCase().includes(searchLower)
+      );
+    }
+    if (recurringFilter) {
+      result = result.filter((transaction) => {
+        if (recurringFilter === "recurring") {
+          return transaction.isRecurring;
+        } else if (recurringFilter === "non-recurring") {
+          return !transaction.isRecurring;
+        }
+        return true;
+      });
+    }
+    if (typeFilter) {
+      result = result.filter((transaction) => transaction.type === typeFilter);
+    }
+    result = result.sort((a, b) => {
+      let comparison = 0;
+      switch (sortConfig.field) {
+        case "date":
+          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+          break;
+        case "amount":
+          comparison = a.amount - b.amount;
+          break;
+        case "category":
+          comparison = a.category.localeCompare(b.category);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortConfig.direction === "asc" ? comparison : -comparison;
+    });
+    return result;
+  }, [transactions, searchTerm, typeFilter, recurringFilter, sortConfig]);
 
   interface FieldType {
     field: string;
@@ -132,13 +172,13 @@ const TransactionTable = ({
         : filteredAndSortedTransactions.map((transaction) => transaction.id)
     );
   };
-  const handleClearFilters = () => {};
-  const handleBulkDelete = () => {
+  const handleClearFilters = () => {
     setSearchTerm("");
     setTypeFilter("");
     setRecurringFilter("");
     setSelectedIds([]);
   };
+  const handleBulkDelete = () => {};
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-4">

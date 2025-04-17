@@ -93,3 +93,4 @@ export async function getAccountWithTransactions(accountId: string) {
     })),
   };
 }
+export async function bulkDeleteTransaction(transactionIds: string) {}
