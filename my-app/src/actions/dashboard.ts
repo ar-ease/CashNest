@@ -49,6 +49,7 @@ const serializeTransaction = (data: any): any => {
 export async function createAccount(data: any) {
   try {
     const { userId } = await auth();
+
     if (!userId) throw new Error("User not found");
 
     const user = await db.user.findUnique({
@@ -99,6 +100,7 @@ export async function createAccount(data: any) {
 }
 export async function getUserAccount() {
   const { userId } = await auth();
+
   if (!userId) throw new Error("User not found");
 
   const user = await db.user.findUnique({

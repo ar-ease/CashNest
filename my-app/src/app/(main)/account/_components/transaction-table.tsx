@@ -1,6 +1,7 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useMemo } from "react";
+import { toast } from "sonner";
 import {
   ChevronDown,
   Search,
@@ -51,6 +52,9 @@ import { categoryColors } from "@/data/categories";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import useFetch from "@/hooks/use-fetch";
+import { bulkDeleteTransaction } from "@/actions/accounts";
+import BarLoader from "react-spinners/BarLoader";
 type TransactionsType = {
   id: string;
   type: "EXPENSE" | "INCOME"; // or whatever your enum is
@@ -60,13 +64,13 @@ type TransactionsType = {
   category: string;
   receiptUrl?: string | null;
   isRecurring: boolean;
-  recurringInterval?: string | null;
-  nextReccurenceDate?: string | null;
-  lastProcessed?: string | null;
-  status?: string;
-  userId: string;
-  accountId: string;
-  createdAt: string | Date;
+  // recurringInterval?: string | null;
+  // nextReccurenceDate?: string | null;
+  // lastProcessed?: string | null;
+  // status?: string;
+  // userId: string;
+  // accountId: string;
+  // createdAt: string | Date;
 };
 
 const TransactionTable = ({
@@ -77,10 +81,10 @@ const TransactionTable = ({
   const router = useRouter();
   console.log("transaction", transactions);
 
-  const deleteFn = (id: string) => {
-    console.log("hello there");
-    console.log("delete", id);
-  };
+  // const deleteFn = (id: string) => {
+  //   console.log("hello there");
+  //   console.log("delete", id);
+  // };
   interface SortConfig {
     field: string;
     direction: "asc" | "desc";
@@ -97,6 +101,12 @@ const TransactionTable = ({
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
 
   const [recurringFilter, setRecurringFilter] = useState<string>("");
+
+  const {
+    loading: deleteLoading,
+    fn: deleteFn,
+    data: deleted,
+  } = useFetch(bulkDeleteTransaction);
 
   const filteredAndSortedTransactions = useMemo(() => {
     let result = [...transactions];
@@ -172,15 +182,30 @@ const TransactionTable = ({
         : filteredAndSortedTransactions.map((transaction) => transaction.id)
     );
   };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete these transactions?"))
+      return;
+    deleteFn(selectedIds);
+  };
+
+  useEffect(() => {
+    if (deleted && !deleteLoading) {
+      toast.error(" Transaction deleted successfully");
+    }
+  }, [deleted, deleteLoading]);
   const handleClearFilters = () => {
     setSearchTerm("");
     setTypeFilter("");
     setRecurringFilter("");
     setSelectedIds([]);
   };
-  const handleBulkDelete = () => {};
   return (
     <div className="space-y-4">
+      {deleteLoading && (
+        <BarLoader className="mt-4" width={"100%"} color="#9333ea" />
+      )}
+
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -389,7 +414,7 @@ const TransactionTable = ({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent>
-                        <DropdownMenuLabel
+                        <DropdownMenuItem
                           onClick={() =>
                             router.push(
                               `/transaction/create?edit={transaction.id}`
@@ -397,7 +422,7 @@ const TransactionTable = ({
                           }
                         >
                           Edit
-                        </DropdownMenuLabel>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => {

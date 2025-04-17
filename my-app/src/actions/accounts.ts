@@ -93,4 +93,142 @@ export async function getAccountWithTransactions(accountId: string) {
     })),
   };
 }
-export async function bulkDeleteTransaction(transactionIds: string) {}
+// export async function bulkDeleteTransaction(transactionIds: string[]) {
+//   try {
+//     const { userId } = await auth();
+//     if (!userId) throw new Error("User not found");
+
+//     const user = await db.user.findUnique({
+//       where: {
+//         clerkUserId: userId,
+//       },
+//     });
+
+//     if (!user) throw new Error("User not found");
+//     const transactions = await db.transaction.findMany({
+//       where: {
+//         id: { in: transactionIds },
+//         userId: user.id,
+//       },
+//     });
+//     if (!transactions) throw new Error("Transaction not found");
+
+//     const AccountBalanceChanges = transactions.reduce((acc, transaction) => {
+//       const change =
+//         transaction.type === "EXPENSE"
+//           ? transaction.amount
+//           : -transaction.amount;
+//       acc[transaction.accountId] = (acc[transaction.accountId] || 0) + change;
+//     }, {});
+
+//     await db.$transaction(async (tx) => {
+//       await tx.transaction.deleteMany({
+//         where: {
+//           id: { in: transactionIds },
+//           userId: user.id,
+//         },
+//       });
+//       for (const [accountId, balanceChange] of Object.entries(
+//         AccountBalanceChanges
+//       )) {
+//         await tx.account.update({
+//           where: {
+//             id: accountId,
+//           },
+//           data: {
+//             balance: {
+//               increment: balanceChange,
+//             },
+//           },
+//         });
+//       }
+//     });
+
+//     revalidatePath("/dashboard");
+//     revalidatePath("/account/[id]");
+//   } catch (error) {}
+// }
+
+export async function bulkDeleteTransaction(
+  transactionIds: string[]
+): Promise<{ success: boolean; message?: string }> {
+  type AccountBalanceMap = {
+    [accountId: string]: number;
+  };
+  try {
+    const { userId } = await auth();
+    if (!userId) throw new Error("User not found");
+
+    const user = await db.user.findUnique({
+      where: {
+        clerkUserId: userId,
+      },
+    });
+    if (!user) throw new Error("User not found");
+
+    const transactions = await db.transaction.findMany({
+      where: {
+        id: { in: transactionIds },
+        userId: user.id,
+      },
+    });
+    if (!transactions.length) throw new Error("Transactions not found");
+
+    const accountBalanceChanges: AccountBalanceMap = transactions.reduce(
+      (acc: AccountBalanceMap, transaction) => {
+        // For expenses, we need to add back to the balance when deleting
+        // For income, we need to subtract from the balance when deleting
+        const change =
+          transaction.type === "EXPENSE"
+            ? transaction.amount
+            : -transaction.amount;
+
+        acc[transaction.accountId] =
+          (acc[transaction.accountId] || 0) +
+          (typeof change === "object" && "toNumber" in change
+            ? change.toNumber()
+            : change);
+        return acc; // This return was missing
+      },
+      {}
+    );
+
+    await db.$transaction(async (tx) => {
+      await tx.transaction.deleteMany({
+        where: {
+          id: { in: transactionIds },
+          userId: user.id,
+        },
+      });
+
+      for (const [accountId, balanceChange] of Object.entries(
+        accountBalanceChanges
+      )) {
+        await tx.account.update({
+          where: {
+            id: accountId,
+          },
+          data: {
+            balance: {
+              increment: balanceChange,
+            },
+          },
+        });
+      }
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/account/[id]");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting transactions:", error);
+    return {
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to delete transactions",
+    };
+  }
+}

@@ -26,6 +26,6 @@ export const checkUser = async () => {
     });
     return newUser;
   } catch (error) {
-    console.error(error);
+    // console.error(error);
   }
 };
