@@ -64,13 +64,6 @@ type TransactionsType = {
   category: string;
   receiptUrl?: string | null;
   isRecurring: boolean;
-  // recurringInterval?: string | null;
-  // nextReccurenceDate?: string | null;
-  // lastProcessed?: string | null;
-  // status?: string;
-  // userId: string;
-  // accountId: string;
-  // createdAt: string | Date;
 };
 
 const TransactionTable = ({
@@ -79,7 +72,7 @@ const TransactionTable = ({
   transactions: TransactionsType[];
 }) => {
   const router = useRouter();
-  console.log("transaction", transactions);
+  // console.log("transaction", transactions);
 
   // const deleteFn = (id: string) => {
   //   console.log("hello there");

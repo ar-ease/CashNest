@@ -50,7 +50,7 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
     fn: createAccountLoading,
   } = useFetch(createAccount);
   const onSubmit = async (data: any) => {
-    console.log(data);
+    // console.log(data);
     setIsOpen(false);
   };
 
