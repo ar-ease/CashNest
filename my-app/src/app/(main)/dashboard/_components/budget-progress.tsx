@@ -35,10 +35,10 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
   const [newBudget, setNewBudget] = React.useState<string>(
     initialBudget?.amount?.toString() || "" // Handle null safely
   );
-  const [currentBudget, setCurrentBudget] = React.useState(initialBudget); // Track the current budget locally
+  //   const [currentBudget, setCurrentBudget] = React.useState(initialBudget); // Track the current budget locally
 
-  const percentageUsed = currentBudget
-    ? (currentExpenses / currentBudget.amount) * 100
+  const percentageUsed = initialBudget
+    ? (currentExpenses / initialBudget.amount) * 100
     : 0;
 
   const {
@@ -50,6 +50,7 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
 
   const handleUpdateBudget = async () => {
     const amount = parseFloat(newBudget);
+
     if (isNaN(amount) || amount <= 0) {
       alert("Please enter a valid amount");
       return;
@@ -60,18 +61,6 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
   useEffect(() => {
     if (updatedBudget?.success) {
       setIsEditing(false);
-      if (updatedBudget?.budget) {
-        setCurrentBudget({
-          ...currentBudget,
-          id: currentBudget?.id || updatedBudget.budget.id,
-          createdAt: currentBudget?.createdAt || updatedBudget.budget.createdAt,
-          updatedAt: new Date(),
-          userId: currentBudget?.userId || updatedBudget.budget.userId,
-          lastAlertSent:
-            currentBudget?.lastAlertSent || updatedBudget.budget.lastAlertSent,
-          amount: updatedBudget.budget.amount, // Update the budget amount locally
-        });
-      }
       toast.success("Budget updated successfully");
     }
   }, [updatedBudget]);
@@ -84,7 +73,7 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
 
   const handleCancel = () => {
     setIsEditing(false);
-    setNewBudget(currentBudget?.amount?.toString() || ""); // Reset to the current budget value
+    setNewBudget(initialBudget?.amount?.toString() || ""); // Reset to the current budget value
   };
 
   return (
@@ -120,10 +109,10 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
               ) : (
                 <>
                   <CardDescription>
-                    {currentBudget
+                    {initialBudget
                       ? `$${currentExpenses.toFixed(
                           2
-                        )} of $${currentBudget.amount.toFixed(2)} spent`
+                        )} of $${initialBudget?.amount?.toFixed(2)} spent`
                       : "No Budget set"}
                   </CardDescription>
                   <Button
@@ -147,9 +136,12 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
                   ? "bg-red-500"
                   : percentageUsed >= 75
                   ? "bg-yellow-500 "
-                  : "bg-green-500"
+                  : "bg-purple-500"
               }`}
             />
+            <p className="text-xs text-muted-foreground text-right pt-2">
+              {percentageUsed.toFixed(1)}% of budget used
+            </p>
           </div>
         </CardContent>
       </Card>
