@@ -8,7 +8,7 @@ import {
   Section,
   Text,
 } from "@react-email/components";
-import React, { JSX } from "react";
+import React from "react";
 
 // Define types for our data
 type CategoryExpenses = {
@@ -36,51 +36,47 @@ type BudgetAlertData = {
 type EmailProps = {
   userName?: string;
   type?: "monthly-report" | "budget-alert";
-  data?: Partial<MonthlyReportData | BudgetAlertData>;
+  data?: any;
 };
 
-// Dummy data for preview
-const PREVIEW_DATA = {
-  monthlyReport: {
-    userName: "John Doe",
-    type: "monthly-report" as const,
-    data: {
-      month: "December",
-      stats: {
-        totalIncome: 5000,
-        totalExpenses: 3500,
-        byCategory: {
-          housing: 1500,
-          groceries: 600,
-          transportation: 400,
-          entertainment: 300,
-          utilities: 700,
-        },
+// Default data to use when no data is provided
+const DEFAULT_DATA = {
+  "monthly-report": {
+    month: "Current Month",
+    stats: {
+      totalIncome: 5000,
+      totalExpenses: 3500,
+      byCategory: {
+        housing: 1500,
+        groceries: 600,
+        transportation: 400,
+        entertainment: 300,
+        utilities: 700,
       },
-      insights: [
-        "Your housing expenses are 43% of your total spending - consider reviewing your housing costs.",
-        "Great job keeping entertainment expenses under control this month!",
-        "Setting up automatic savings could help you save 20% more of your income.",
-      ],
-    } as MonthlyReportData,
+    },
+    insights: [
+      "This is a sample insight about your spending.",
+      "This is another sample insight about your finances.",
+      "This is a third sample insight with recommendations.",
+    ],
   },
-  budgetAlert: {
-    userName: "John Doe",
-    type: "budget-alert" as const,
-    data: {
-      percentageUsed: 85,
-      budgetAmount: 4000,
-      totalExpenses: 3400,
-    } as BudgetAlertData,
+  "budget-alert": {
+    percentageUsed: 85,
+    budgetAmount: 4000,
+    totalExpenses: 3400,
   },
 };
 
-// Type guard to check if data is MonthlyReportData
 function isMonthlyReportData(data: any): data is MonthlyReportData {
-  return data && "month" in data && "stats" in data;
+  return (
+    data &&
+    "month" in data &&
+    "stats" in data &&
+    "totalIncome" in data.stats &&
+    "totalExpenses" in data.stats
+  );
 }
 
-// Type guard to check if data is BudgetAlertData
 function isBudgetAlertData(data: any): data is BudgetAlertData {
   return (
     data &&
@@ -91,11 +87,24 @@ function isBudgetAlertData(data: any): data is BudgetAlertData {
 }
 
 export default function EmailTemplate({
-  userName = "",
+  userName = "User",
   type = "monthly-report",
   data = {},
-}: EmailProps): JSX.Element {
-  if (type === "monthly-report" && isMonthlyReportData(data)) {
+}: EmailProps) {
+  console.log("EmailTemplate called with:", { userName, type, data });
+
+  // Check if data is empty and use default data if needed
+  const isEmpty = Object.keys(data).length === 0;
+
+  // Use default data if empty
+  const effectiveData = isEmpty
+    ? DEFAULT_DATA[type as keyof typeof DEFAULT_DATA]
+    : data;
+
+  console.log("Using data:", effectiveData);
+
+  // Monthly Report Template
+  if (type === "monthly-report") {
     return (
       <Html>
         <Head />
@@ -106,32 +115,38 @@ export default function EmailTemplate({
 
             <Text style={styles.text}>Hello {userName},</Text>
             <Text style={styles.text}>
-              Here&rsquo;s your financial summary for {data.month}:
+              Here&rsquo;s your financial summary for {effectiveData.month}:
             </Text>
 
             {/* Main Stats */}
             <Section style={styles.statsContainer}>
               <div style={styles.stat}>
                 <Text style={styles.text}>Total Income</Text>
-                <Text style={styles.heading}>${data.stats.totalIncome}</Text>
+                <Text style={styles.heading}>
+                  ${effectiveData.stats.totalIncome}
+                </Text>
               </div>
               <div style={styles.stat}>
                 <Text style={styles.text}>Total Expenses</Text>
-                <Text style={styles.heading}>${data.stats.totalExpenses}</Text>
+                <Text style={styles.heading}>
+                  ${effectiveData.stats.totalExpenses}
+                </Text>
               </div>
               <div style={styles.stat}>
                 <Text style={styles.text}>Net</Text>
                 <Text style={styles.heading}>
-                  ${data.stats.totalIncome - data.stats.totalExpenses}
+                  $
+                  {effectiveData.stats.totalIncome -
+                    effectiveData.stats.totalExpenses}
                 </Text>
               </div>
             </Section>
 
             {/* Category Breakdown */}
-            {data.stats.byCategory && (
+            {effectiveData.stats.byCategory && (
               <Section style={styles.section}>
                 <Heading style={styles.heading}>Expenses by Category</Heading>
-                {Object.entries(data.stats.byCategory).map(
+                {Object.entries(effectiveData.stats.byCategory).map(
                   ([category, amount]) => (
                     <div key={category} style={styles.row}>
                       <Text style={styles.text}>{category}</Text>
@@ -143,14 +158,16 @@ export default function EmailTemplate({
             )}
 
             {/* AI Insights */}
-            {data.insights && (
+            {effectiveData.insights && (
               <Section style={styles.section}>
                 <Heading style={styles.heading}>Welth Insights</Heading>
-                {data.insights.map((insight, index) => (
-                  <Text key={index} style={styles.text}>
-                    • {insight}
-                  </Text>
-                ))}
+                {effectiveData.insights.map(
+                  (insight: string, index: number) => (
+                    <Text key={index} style={styles.text}>
+                      • {insight}
+                    </Text>
+                  )
+                )}
               </Section>
             )}
 
@@ -164,7 +181,8 @@ export default function EmailTemplate({
     );
   }
 
-  if (type === "budget-alert" && isBudgetAlertData(data)) {
+  // Budget Alert Template
+  if (type === "budget-alert") {
     return (
       <Html>
         <Head />
@@ -174,22 +192,26 @@ export default function EmailTemplate({
             <Heading style={styles.title}>Budget Alert</Heading>
             <Text style={styles.text}>Hello {userName},</Text>
             <Text style={styles.text}>
-              You&rsquo;ve used {data.percentageUsed.toFixed(1)}% of your
-              monthly budget.
+              You&rsquo;ve used {effectiveData.percentageUsed.toFixed(1)}% of
+              your monthly budget.
             </Text>
             <Section style={styles.statsContainer}>
               <div style={styles.stat}>
                 <Text style={styles.text}>Budget Amount</Text>
-                <Text style={styles.heading}>${data.budgetAmount}</Text>
+                <Text style={styles.heading}>
+                  ${effectiveData.budgetAmount}
+                </Text>
               </div>
               <div style={styles.stat}>
                 <Text style={styles.text}>Spent So Far</Text>
-                <Text style={styles.heading}>${data.totalExpenses}</Text>
+                <Text style={styles.heading}>
+                  ${effectiveData.totalExpenses}
+                </Text>
               </div>
               <div style={styles.stat}>
                 <Text style={styles.text}>Remaining</Text>
                 <Text style={styles.heading}>
-                  ${data.budgetAmount - data.totalExpenses}
+                  ${effectiveData.budgetAmount - effectiveData.totalExpenses}
                 </Text>
               </div>
             </Section>
@@ -199,7 +221,7 @@ export default function EmailTemplate({
     );
   }
 
-  // Default fallback
+  // Default fallback - should never reach here with our default type
   return (
     <Html>
       <Head />
@@ -208,7 +230,9 @@ export default function EmailTemplate({
         <Container style={styles.container}>
           <Heading style={styles.title}>Email Template</Heading>
           <Text style={styles.text}>Hello {userName},</Text>
-          <Text style={styles.text}>Invalid email type or data provided.</Text>
+          <Text style={styles.text}>
+            Invalid email type provided: {type}. Please contact support.
+          </Text>
         </Container>
       </Body>
     </Html>
