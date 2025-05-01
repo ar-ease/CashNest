@@ -12,15 +12,17 @@ const DashboardPage = async () => {
   const accountsArray = Object.values(accounts);
   const defaultAccount = accountsArray.find((account) => account.isDefault);
   let budgetData = null;
+
   if (defaultAccount) {
     budgetData = await getCurrentBudget(defaultAccount.id);
   }
+  console.log(budgetData);
   return (
     <div className=" space-y-8">
       {defaultAccount && (
         <BudgetProgress
           initialBudget={budgetData?.budget || null}
-          currentExpenses={budgetData?.currentExpenses || 0}
+          currentExpenses={budgetData?.currentExpenses ?? 0}
         />
       )}
 

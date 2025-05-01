@@ -31,15 +31,34 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
   initialBudget,
   currentExpenses,
 }) => {
-  const [isEditing, setIsEditing] = React.useState<boolean>(false);
-  const [newBudget, setNewBudget] = React.useState<string>(
-    initialBudget?.amount?.toString() || "" // Handle null safely
-  );
-  //   const [currentBudget, setCurrentBudget] = React.useState(initialBudget); // Track the current budget locally
+  // Debug logs to track props
+  useEffect(() => {
+    console.log("BudgetProgress component received:", {
+      initialBudget,
+      currentExpenses,
+      budgetAmount: initialBudget?.amount,
+    });
+  }, [initialBudget, currentExpenses]);
 
-  const percentageUsed = initialBudget
-    ? (currentExpenses / initialBudget.amount) * 100
-    : 0;
+  const [isEditing, setIsEditing] = React.useState<boolean>(false);
+  const [newBudget, setNewBudget] = React.useState<string>("");
+
+  // Update local state when initialBudget changes
+  useEffect(() => {
+    if (initialBudget?.amount !== undefined) {
+      setNewBudget(initialBudget.amount.toString());
+      console.log("Set newBudget state to:", initialBudget.amount.toString());
+    }
+  }, [initialBudget]);
+
+  // Calculate percentage safely
+  const percentageUsed = React.useMemo(() => {
+    if (!initialBudget || !initialBudget.amount || initialBudget.amount <= 0) {
+      return 0;
+    }
+    const percentage = (currentExpenses / initialBudget.amount) * 100;
+    return Math.min(100, Math.max(0, percentage)); // Clamp between 0-100
+  }, [currentExpenses, initialBudget]);
 
   const {
     loading: isLoading,
@@ -52,7 +71,7 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
     const amount = parseFloat(newBudget);
 
     if (isNaN(amount) || amount <= 0) {
-      alert("Please enter a valid amount");
+      toast.error("Please enter a valid amount greater than zero");
       return;
     }
     await updateBudgetFn(amount);
@@ -73,7 +92,9 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
 
   const handleCancel = () => {
     setIsEditing(false);
-    setNewBudget(initialBudget?.amount?.toString() || ""); // Reset to the current budget value
+    if (initialBudget?.amount) {
+      setNewBudget(initialBudget.amount.toString());
+    }
   };
 
   return (
@@ -93,6 +114,8 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
                     placeholder="Enter amount"
                     autoFocus
                     disabled={isLoading}
+                    min="1"
+                    step="1"
                   />
                   <Button
                     variant="ghost"
@@ -109,10 +132,10 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
               ) : (
                 <>
                   <CardDescription>
-                    {initialBudget
+                    {initialBudget && initialBudget.amount > 0
                       ? `$${currentExpenses.toFixed(
                           2
-                        )} of $${initialBudget?.amount?.toFixed(2)} spent`
+                        )} of $${initialBudget.amount.toFixed(2)} spent`
                       : "No Budget set"}
                   </CardDescription>
                   <Button
@@ -135,8 +158,8 @@ const BudgetProgress: React.FC<BudgetProgressProps> = ({
                 percentageUsed >= 90
                   ? "bg-red-500"
                   : percentageUsed >= 75
-                  ? "bg-yellow-500 "
-                  : "bg-purple-500"
+                    ? "bg-yellow-500 "
+                    : "bg-purple-500"
               }`}
             />
             <p className="text-xs text-muted-foreground text-right pt-2">

@@ -8,83 +8,42 @@ import {
   Section,
   Text,
 } from "@react-email/components";
+import React, { JSX } from "react";
 
-// Define interfaces for the data structures
-interface CategoryExpenses {
-  [key: string]: number;
-}
+// Define types for our data
+type CategoryExpenses = {
+  [category: string]: number;
+};
 
-interface Stats {
+type MonthlyReportStats = {
   totalIncome: number;
   totalExpenses: number;
-  byCategory: CategoryExpenses;
-}
+  byCategory?: CategoryExpenses;
+};
 
-interface MonthlyReportData {
+type MonthlyReportData = {
   month: string;
-  stats: Stats;
-  insights: string[];
-}
-
-const defaultMonthlyReportData: MonthlyReportData = {
-  month: "",
-  stats: {
-    totalIncome: 0,
-    totalExpenses: 0,
-    byCategory: {},
-  },
-  insights: [],
+  stats: MonthlyReportStats;
+  insights?: string[];
 };
 
-const defaultBudgetAlertData: BudgetAlertData = {
-  percentageUsed: 0,
-  budgetAmount: 0,
-  totalExpenses: 0,
-};
-
-type DefaultData = MonthlyReportData | BudgetAlertData;
-
-function getDefaultData(type: "monthly-report" | "budget-alert"): DefaultData {
-  return type === "monthly-report"
-    ? defaultMonthlyReportData
-    : defaultBudgetAlertData;
-}
-
-interface BudgetAlertData {
+type BudgetAlertData = {
   percentageUsed: number;
   budgetAmount: number;
   totalExpenses: number;
-  accountName?: string;
-}
+};
 
-interface EmailTemplateProps {
+type EmailProps = {
   userName?: string;
   type?: "monthly-report" | "budget-alert";
-  data?: MonthlyReportData | BudgetAlertData;
-}
+  data?: Partial<MonthlyReportData | BudgetAlertData>;
+};
 
-// Type guard to check if data is MonthlyReportData
-function isMonthlyReportData(data: any): data is MonthlyReportData {
-  return data?.stats && data?.month && Array.isArray(data?.insights);
-}
-
-// Type guard to check if data is BudgetAlertData
-function isBudgetAlertData(data: any): data is BudgetAlertData {
-  return (
-    "percentageUsed" in data &&
-    "budgetAmount" in data &&
-    "totalExpenses" in data
-  );
-}
-
-// Dummy data with proper typing
-const PREVIEW_DATA: Record<
-  string,
-  { userName: string; type: string; data: MonthlyReportData | BudgetAlertData }
-> = {
+// Dummy data for preview
+const PREVIEW_DATA = {
   monthlyReport: {
     userName: "John Doe",
-    type: "monthly-report",
+    type: "monthly-report" as const,
     data: {
       month: "December",
       stats: {
@@ -103,24 +62,39 @@ const PREVIEW_DATA: Record<
         "Great job keeping entertainment expenses under control this month!",
         "Setting up automatic savings could help you save 20% more of your income.",
       ],
-    },
+    } as MonthlyReportData,
   },
   budgetAlert: {
     userName: "John Doe",
-    type: "budget-alert",
+    type: "budget-alert" as const,
     data: {
       percentageUsed: 85,
       budgetAmount: 4000,
       totalExpenses: 3400,
-    },
+    } as BudgetAlertData,
   },
 };
+
+// Type guard to check if data is MonthlyReportData
+function isMonthlyReportData(data: any): data is MonthlyReportData {
+  return data && "month" in data && "stats" in data;
+}
+
+// Type guard to check if data is BudgetAlertData
+function isBudgetAlertData(data: any): data is BudgetAlertData {
+  return (
+    data &&
+    "percentageUsed" in data &&
+    "budgetAmount" in data &&
+    "totalExpenses" in data
+  );
+}
 
 export default function EmailTemplate({
   userName = "",
   type = "monthly-report",
   data = {},
-}: EmailTemplateProps) {
+}: EmailProps): JSX.Element {
   if (type === "monthly-report" && isMonthlyReportData(data)) {
     return (
       <Html>
@@ -225,16 +199,28 @@ export default function EmailTemplate({
     );
   }
 
-  // Default return for invalid type/data combinations
-  return null;
+  // Default fallback
+  return (
+    <Html>
+      <Head />
+      <Preview>Email Template</Preview>
+      <Body style={styles.body}>
+        <Container style={styles.container}>
+          <Heading style={styles.title}>Email Template</Heading>
+          <Text style={styles.text}>Hello {userName},</Text>
+          <Text style={styles.text}>Invalid email type or data provided.</Text>
+        </Container>
+      </Body>
+    </Html>
+  );
 }
 
-// Define style types
-interface Styles {
+// Define the CSS styles with TypeScript interface
+interface StylesDictionary {
   [key: string]: React.CSSProperties;
 }
 
-const styles: Styles = {
+const styles: StylesDictionary = {
   body: {
     backgroundColor: "#f6f9fc",
     fontFamily: "-apple-system, sans-serif",

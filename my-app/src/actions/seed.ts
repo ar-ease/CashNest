@@ -2,8 +2,8 @@ import { db } from "@/lib/prisma";
 import { subDays } from "date-fns";
 import { TransactionType, TransactionStatus } from "@prisma/client";
 
-const ACCOUNT_ID = "fbcc6f95-e921-44f9-b635-99c30c6265f2";
-const USER_ID = "d8698bf0-28dc-4ad5-b691-f48e3dc1f63b";
+const ACCOUNT_ID = "13d85ead-1228-4751-99c9-6944209e4f82";
+const USER_ID = "5643ed10-5c76-4c49-b2db-bfa053eb4b9b";
 
 // Define types for categories
 interface CategoryItem {
