@@ -32,7 +32,7 @@ export const Header = async () => {
                   dashboard
                 </Button>
               </Link>
-              <Link href={"/transactions/create"} className="">
+              <Link href={"/transaction/create"} className="">
                 <Button>
                   <PenBox size={18} />
                   transactions

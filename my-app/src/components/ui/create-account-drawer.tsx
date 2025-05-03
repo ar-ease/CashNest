@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { accountSchema } from "@/app/lib/scheema"; // Import from your schema file
+import { accountSchema } from "@/app/lib/schema"; // Import from your schema file
 import {
   Drawer,
   DrawerClose,
