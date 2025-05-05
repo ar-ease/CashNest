@@ -25,6 +25,7 @@ import { z } from "zod";
 import useFetch from "@/hooks/use-fetch";
 import { createAccount } from "@/actions/dashboard";
 import { Loader2 } from "lucide-react";
+
 const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -38,20 +39,22 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
     resolver: zodResolver(accountSchema),
     defaultValues: {
       name: "",
-      type: "CURRENT", // Changed from "CURRENT" to match your schema
+      type: "CURRENT",
       balance: "",
       isDefault: false,
     },
   });
 
-  const {
-    data: newAccount,
-    error,
-    fn: createAccountLoading,
-  } = useFetch(createAccount);
-  const onSubmit = async (data: any) => {
-    // console.log(data);
-    setIsOpen(false);
+  const { fn: createAccountFn, isLoading: createAccountLoading } =
+    useFetch(createAccount);
+
+  const onSubmit = async (formData: z.infer<typeof accountSchema>) => {
+    try {
+      await createAccountFn(formData);
+      setIsOpen(false);
+    } catch (error) {
+      console.error("Failed to create account:", error);
+    }
   };
 
   return (
@@ -87,8 +90,8 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
                     <SelectValue placeholder="select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="current">current</SelectItem>
-                    <SelectItem value="savings">Savings</SelectItem>
+                    <SelectItem value="CURRENT">Current</SelectItem>
+                    <SelectItem value="SAVINGS">Savings</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors?.type && (
@@ -141,12 +144,12 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
                 <Button
                   type="submit"
                   className="flex-1 ml-2"
-                  disabled={!!createAccountLoading}
+                  disabled={createAccountLoading}
                 >
-                  {!createAccountLoading ? (
+                  {createAccountLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
-                      creating...
+                      Creating...
                     </>
                   ) : (
                     "Create Account"

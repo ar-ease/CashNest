@@ -9,11 +9,10 @@ import {
   Clock,
   MoreHorizontal,
   RefreshCcw,
-  SearchIcon,
   Trash,
   X,
 } from "lucide-react";
-import { format, set } from "date-fns";
+import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import {
   Select,
@@ -27,7 +26,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -41,7 +39,6 @@ import {
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -55,15 +52,17 @@ import { Input } from "@/components/ui/input";
 import useFetch from "@/hooks/use-fetch";
 import { bulkDeleteTransaction } from "@/actions/accounts";
 import BarLoader from "react-spinners/BarLoader";
+
 type TransactionsType = {
   id: string;
-  type: "EXPENSE" | "INCOME"; // or whatever your enum is
+  type: "EXPENSE" | "INCOME";
   amount: number;
   description: string;
   date: string | Date;
   category: string;
   receiptUrl?: string | null;
   isRecurring: boolean;
+  recurringInterval?: string | null;
 };
 
 const TransactionTable = ({
@@ -72,12 +71,7 @@ const TransactionTable = ({
   transactions: TransactionsType[];
 }) => {
   const router = useRouter();
-  // console.log("transaction", transactions);
 
-  // const deleteFn = (id: string) => {
-  //   console.log("hello there");
-  //   console.log("delete", id);
-  // };
   interface SortConfig {
     field: string;
     direction: "asc" | "desc";
@@ -88,13 +82,10 @@ const TransactionTable = ({
     field: "date",
     direction: "desc",
   });
-  // console.log(selectedIds);
 
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
-
   const [recurringFilter, setRecurringFilter] = useState<string>("");
-
   const [page, setPage] = useState<number>(1);
 
   const {
@@ -144,34 +135,24 @@ const TransactionTable = ({
     return result;
   }, [transactions, searchTerm, typeFilter, recurringFilter, sortConfig]);
 
-  interface FieldType {
-    field: string;
-    direction: "asc" | "desc";
-  }
-
   const handleSort = (field: string) => {
-    setSortConfig((current: FieldType) => ({
+    setSortConfig((current) => ({
       field,
       direction:
         current.field === field && current.direction === "asc" ? "desc" : "asc",
     }));
   };
-  // const handleSelect = (id) => {
-  //   setSelectedIds((current) =>
-  //     current.includes(id)
-  //       ? current.filter((item) => item != id)
-  //       : [...current, id]
-  //   );
-  // };
+
   const handleSelect = (id: string) => {
-    setSelectedIds((current: string[]) =>
+    setSelectedIds((current) =>
       current.includes(id)
         ? current.filter((item) => item !== id)
         : [...current, id]
     );
   };
+
   const handleSelectAll = () => {
-    setSelectedIds((current: string[]) =>
+    setSelectedIds((current) =>
       current.length === filteredAndSortedTransactions.length
         ? []
         : filteredAndSortedTransactions.map((transaction) => transaction.id)
@@ -189,12 +170,14 @@ const TransactionTable = ({
       toast.error(" Transaction deleted successfully");
     }
   }, [deleted, deleteLoading]);
+
   const handleClearFilters = () => {
     setSearchTerm("");
     setTypeFilter("");
     setRecurringFilter("");
     setSelectedIds([]);
   };
+
   return (
     <div className="space-y-4">
       {deleteLoading && (
@@ -333,7 +316,7 @@ const TransactionTable = ({
             ) : (
               filteredAndSortedTransactions
                 ?.slice(page * 14 - 14, page * 14)
-                ?.map((transaction: any) => (
+                ?.map((transaction: TransactionsType) => (
                   <TableRow key={transaction.id}>
                     <TableCell>
                       {" "}

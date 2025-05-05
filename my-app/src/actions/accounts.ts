@@ -2,29 +2,39 @@
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { Decimal } from "@prisma/client/runtime/library";
 
-const serializeTransaction = (obj: {
-  balance?: import("@prisma/client/runtime/library").Decimal;
-  amount?: import("@prisma/client/runtime/library").Decimal;
+// Create more specific types
+interface AccountData {
+  balance?: Decimal;
+  amount?: Decimal;
   [key: string]: unknown;
-}) => {
+}
+
+interface SerializedAccountData {
+  [key: string]: unknown;
+  balance?: number;
+  amount?: number;
+}
+
+const serializeTransaction = (obj: AccountData): SerializedAccountData => {
   const { ...rest } = obj;
-  const serialized: {
-    [key: string]: unknown;
-    balance?: number;
-    amount?: number;
-  } = {};
+  const serialized: SerializedAccountData = {};
 
   if (rest.balance) {
-    serialized.balance = rest.balance.toNumber();
+    serialized.balance = rest.balance?.toNumber();
   }
   if (rest.amount) {
-    serialized.amount = rest.amount.toNumber();
+    serialized.amount = rest.amount?.toNumber();
   }
   return serialized;
 };
 
-export async function updateDefaultAccount(accountId: string) {
+export async function updateDefaultAccount(accountId: string): Promise<{
+  success: boolean;
+  data?: SerializedAccountData;
+  error?: string;
+}> {
   try {
     const { userId } = await auth();
     if (!userId) throw new Error("User not found");
@@ -64,7 +74,42 @@ export async function updateDefaultAccount(accountId: string) {
     return { success: false, error: (error as Error).message };
   }
 }
-export async function getAccountWithTransactions(accountId: string) {
+
+// Define a more specific return type for getAccountWithTransactions
+interface AccountWithTransactions {
+  id: string;
+  name: string;
+  type: string;
+  balance: number; // Converted from Decimal
+  isDefault: boolean;
+  userId: string;
+  createdAt: Date;
+  transactions: Array<{
+    id: string;
+    type: string;
+    amount: number; // Converted from Decimal
+    description: string;
+    date: Date;
+    category: string;
+    receiptUrl?: string | null;
+    isRecurring: boolean;
+    recurringInterval?: string | null;
+    nextRecurringDate?: Date | null;
+    lastProcessed?: Date | null;
+    status: string;
+    userId: string;
+    accountId: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  _count: {
+    transactions: number;
+  };
+}
+
+export async function getAccountWithTransactions(
+  accountId: string
+): Promise<AccountWithTransactions | null> {
   const { userId } = await auth();
   if (!userId) throw new Error("User not found");
 
@@ -95,68 +140,13 @@ export async function getAccountWithTransactions(accountId: string) {
 
   return {
     ...account,
-    balance: account.balance,
+    balance: account.balance.toNumber(),
     transactions: account.transactions.map((t) => ({
       ...t,
-      amount: t.amount.toNumber(), // <- convert Decimal to number
+      amount: t.amount.toNumber(), // Convert Decimal to number
     })),
   };
 }
-// export async function bulkDeleteTransaction(transactionIds: string[]) {
-//   try {
-//     const { userId } = await auth();
-//     if (!userId) throw new Error("User not found");
-
-//     const user = await db.user.findUnique({
-//       where: {
-//         clerkUserId: userId,
-//       },
-//     });
-
-//     if (!user) throw new Error("User not found");
-//     const transactions = await db.transaction.findMany({
-//       where: {
-//         id: { in: transactionIds },
-//         userId: user.id,
-//       },
-//     });
-//     if (!transactions) throw new Error("Transaction not found");
-
-//     const AccountBalanceChanges = transactions.reduce((acc, transaction) => {
-//       const change =
-//         transaction.type === "EXPENSE"
-//           ? transaction.amount
-//           : -transaction.amount;
-//       acc[transaction.accountId] = (acc[transaction.accountId] || 0) + change;
-//     }, {});
-
-//     await db.$transaction(async (tx) => {
-//       await tx.transaction.deleteMany({
-//         where: {
-//           id: { in: transactionIds },
-//           userId: user.id,
-//         },
-//       });
-//       for (const [accountId, balanceChange] of Object.entries(
-//         AccountBalanceChanges
-//       )) {
-//         await tx.account.update({
-//           where: {
-//             id: accountId,
-//           },
-//           data: {
-//             balance: {
-//               increment: balanceChange,
-//             },
-//           },
-//         });
-//       }
-//     });
-
-//     revalidatePath("/dashboard");
-//     revalidatePath("/account/[id]");
-//   } catch (error) {}
-// }
 
 export async function bulkDeleteTransaction(
   transactionIds: string[]

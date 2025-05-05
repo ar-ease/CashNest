@@ -59,6 +59,17 @@ interface TransactionData {
   recurringInterval?: RecurringInterval;
 }
 
+interface FormData {
+  type: TransactionType;
+  amount: string;
+  description?: string;
+  accountId: string;
+  category: string;
+  date: Date;
+  isRecurring: boolean;
+  recurringInterval?: RecurringInterval;
+}
+
 interface ScannedData {
   amount: number;
   date: string | Date;
@@ -92,7 +103,7 @@ export function AddTransactionForm({
     setValue,
     getValues,
     reset,
-  } = useForm({
+  } = useForm<FormData>({
     resolver: zodResolver(transactionSchema),
     defaultValues:
       editMode && initialData
@@ -145,12 +156,13 @@ export function AddTransactionForm({
 
   // Memoize the submit handler
   const onSubmit = useCallback(
-    (data: any) => {
+    (data: FormData) => {
       if (isSubmitting) return;
 
       setIsSubmitting(true);
       const formData: TransactionData = {
         ...data,
+        description: data.description || "",
         amount: parseFloat(data.amount),
       };
 
@@ -183,9 +195,6 @@ export function AddTransactionForm({
   const handleCancel = useCallback(() => {
     router.back();
   }, [router]);
-
-  // Use a key to force remount if necessary
-  const [formKey, setFormKey] = useState(Date.now());
 
   useEffect(() => {
     if (transactionResult?.success && !transactionLoading) {
@@ -260,7 +269,7 @@ export function AddTransactionForm({
   );
 
   return (
-    <div key={formKey}>
+    <div>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Receipt Scanner - Only show in create mode */}
         {!editMode && <ReceiptScanner onScanComplete={handleScanComplete} />}

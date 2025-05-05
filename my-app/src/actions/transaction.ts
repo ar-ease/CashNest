@@ -2,12 +2,11 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import aj from "@/lib/arcjet";
 import { request } from "@arcjet/next";
-import { Transaction, Account, User } from "@prisma/client";
+import { Transaction } from "@prisma/client";
 
 // Types
 type RecurringInterval = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
@@ -34,7 +33,7 @@ interface ReceiptData {
 
 interface TransactionResponse {
   success: boolean;
-  data: Transaction;
+  data: Omit<Transaction, "amount"> & { amount: number };
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -45,10 +44,18 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 //   ...obj,
 //   amount: obj.amount.toNumber(),
 // });
-const serializeAmount = (obj: Transaction): any => ({
+const serializeAmount = (
+  obj: Transaction
+): Omit<Transaction, "amount"> & { amount: number } => ({
   ...obj,
   amount: obj.amount.toNumber(),
 });
+// const serializeAmount = (
+//   obj: Transaction
+// ): Transaction & { amount: number } => ({
+//   ...obj,
+//   amount: obj.amount.toNumber(),
+// });
 
 // Create Transaction
 export async function createTransaction(
@@ -132,7 +139,7 @@ export async function createTransaction(
   }
 }
 
-export async function getTransaction(id: any) {
+export async function getTransaction(id: string) {
   console.log("Getting transaction with ID:", id);
   try {
     // Your existing code

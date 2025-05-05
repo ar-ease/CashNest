@@ -11,7 +11,7 @@ import {
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { accountSchema } from "@/app/lib/schema"; // Import from your schema file
+import { accountSchema } from "@/app/lib/schema";
 import {
   Drawer,
   DrawerClose,
@@ -26,6 +26,13 @@ import { z } from "zod";
 import useFetch from "@/hooks/use-fetch";
 import { createAccount } from "@/actions/dashboard";
 import { Loader2 } from "lucide-react";
+
+// Define a type for the form data from the schema
+type AccountFormData = z.infer<typeof accountSchema>;
+
+// Import the AccountType type from the dashboard actions
+import { AccountType } from "@/actions/dashboard";
+
 const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -35,7 +42,7 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
     formState: { errors },
     setValue,
     watch,
-  } = useForm<z.infer<typeof accountSchema>>({
+  } = useForm<AccountFormData>({
     resolver: zodResolver(accountSchema),
     defaultValues: {
       name: "",
@@ -64,9 +71,10 @@ const CreateAccountDrawer = ({ children }: { children: React.ReactNode }) => {
     }
   }, [error]);
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: AccountFormData) => {
     setIsOpen(false);
-    await createAccountFn(data);
+    // No need for complex casting, just pass the data as is
+    await createAccountFn({ ...data, type: data.type as AccountType });
   };
 
   return (

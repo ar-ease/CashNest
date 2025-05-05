@@ -1,3 +1,4 @@
+import React from "react";
 import {
   BarChart3,
   Receipt,
@@ -12,13 +13,13 @@ interface Stat {
   label: string;
 }
 interface Feature {
-  icon: JSX.Element;
+  icon: React.ReactNode;
   title: string;
   description: string;
 }
 
 interface HowItWorks {
-  icon: JSX.Element;
+  icon: React.ReactNode;
   title: string;
   description: string;
 }

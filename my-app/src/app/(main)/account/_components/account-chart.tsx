@@ -1,14 +1,7 @@
 "use client";
 import { endOfDay, startOfDay, subDays } from "date-fns";
-import React, { PureComponent, useMemo } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import React, { useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -20,7 +13,6 @@ import {
 import {
   BarChart,
   Bar,
-  Rectangle,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -35,12 +27,12 @@ const DATE_RANGES = {
   "3M": { label: "3 Months", days: 90 },
   "6M": { label: "6 Months", days: 180 },
   "1Y": { label: "1 Year", days: 365 },
-
   ALL: { label: "All", days: null },
 };
+
 type TransactionsType = {
   id: string;
-  type: "EXPENSE" | "INCOME"; // or whatever your enum is
+  type: "EXPENSE" | "INCOME";
   amount: number;
   description: string;
   date: string | Date;
@@ -48,51 +40,73 @@ type TransactionsType = {
   receiptUrl?: string | null;
   isRecurring: boolean;
 };
+
+// Define types for grouped data and chart data
+interface GroupedData {
+  date: string;
+  income: number;
+  expense: number;
+}
+
+interface TransactionTotals {
+  income: number;
+  expense: number;
+}
+
 const AccountChart = ({
   transactions,
 }: {
   transactions: TransactionsType[];
 }) => {
-  //   console.log("hell", transactions);
   const [dateRange, setDateRange] =
     React.useState<keyof typeof DATE_RANGES>("1M");
-  const now = new Date();
+
   const filteredData = useMemo(() => {
+    const now = new Date();
     const range = DATE_RANGES[dateRange];
     const startDate = range.days
       ? startOfDay(subDays(now, range.days))
       : startOfDay(new Date(0));
-    const filtered = transactions?.filter((t: any) => {
-      const transactionDate = new Date(t.date);
+
+    const filtered = transactions?.filter((transaction: TransactionsType) => {
+      const transactionDate = new Date(transaction.date);
       return transactionDate >= startDate && transactionDate <= endOfDay(now);
     });
 
-    const grouped = filtered?.reduce((acc: any, t: any) => {
-      const date = new Date(t.date).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-      if (!acc[date]) {
-        acc[date] = { date, income: 0, expense: 0 };
-      }
-      acc[date].income += t.amount;
-      acc[date].expense += t.amount; // Assuming uv is also the amount
-      return acc;
-    }, {});
-    return Object?.values(grouped).sort(
-      (a: any, b: any) =>
-        new Date(a.name).getTime() - new Date(b.name).getTime()
+    const grouped = filtered?.reduce(
+      (acc: Record<string, GroupedData>, transaction: TransactionsType) => {
+        const date = new Date(transaction.date).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+
+        if (!acc[date]) {
+          acc[date] = { date, income: 0, expense: 0 };
+        }
+
+        if (transaction.type === "INCOME") {
+          acc[date].income += transaction.amount;
+        } else if (transaction.type === "EXPENSE") {
+          acc[date].expense += transaction.amount;
+        }
+
+        return acc;
+      },
+      {}
+    );
+
+    return Object.values(grouped || {}).sort(
+      (a: GroupedData, b: GroupedData) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
     );
   }, [transactions, dateRange]);
-  const totals = useMemo<{
-    income: number;
-    expense: number;
-  }>(() => {
+
+  const totals = useMemo<TransactionTotals>(() => {
     return (
       filteredData?.reduce(
-        (acc: { income: number; expense: number }, t: any) => {
-          acc.income += t.income;
-          acc.expense += t.expense;
+        (acc: TransactionTotals, data: GroupedData) => {
+          acc.income += data.income;
+          acc.expense += data.expense;
           return acc;
         },
         { income: 0, expense: 0 }
@@ -106,10 +120,10 @@ const AccountChart = ({
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
           <CardTitle>Transaction Overview</CardTitle>
           <Select
-            value={dateRange} // Bind the current value to the state
+            value={dateRange}
             onValueChange={(value) =>
               setDateRange(value as keyof typeof DATE_RANGES)
-            } // Update the state on change
+            }
           >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Duration" />
@@ -162,9 +176,7 @@ const AccountChart = ({
                 }}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-
                 <XAxis dataKey="date" />
-
                 <YAxis
                   fontSize={12}
                   tickLine={false}
@@ -179,7 +191,6 @@ const AccountChart = ({
                   name="Income"
                   radius={[4, 4, 0, 0]}
                 />
-
                 <Bar
                   dataKey="expense"
                   fill="#82ca9d"

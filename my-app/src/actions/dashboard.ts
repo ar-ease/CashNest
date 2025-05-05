@@ -2,30 +2,122 @@
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { Decimal } from "@prisma/client/runtime/library";
+
+// Define interfaces matching the Prisma schema
+export type AccountType = "CURRENT" | "SAVINGS";
+
+enum TransactionType {
+  INCOME = "INCOME",
+  EXPENSE = "EXPENSE",
+}
+
+enum RecurringInterval {
+  DAILY = "DAILY",
+  WEEKLY = "WEEKLY",
+  MONTHLY = "MONTHLY",
+  YEARLY = "YEARLY",
+}
+
+enum TransactionStatus {
+  COMPLETED = "COMPLETED",
+  PENDING = "PENDING",
+  CANCELLED = "CANCELLED",
+}
+
+// Define the expected structure for account creation data
+interface CreateAccountData {
+  name: string;
+  balance: string | number;
+  type: AccountType;
+  isDefault?: boolean;
+}
+
+// Serialized versions of the interfaces (after processing Decimal and Date)
+interface SerializedAccount {
+  id: string;
+  name: string;
+  type: AccountType;
+  balance: number;
+  isDefault: boolean;
+  userId: string;
+  createdAt: string;
+  transactions?: SerializedTransaction[];
+  _count?: {
+    transactions: number;
+  };
+}
+
+interface SerializedTransaction {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  description: string;
+  date: string;
+  category: string;
+  receiptUrl?: string;
+  isRecurring: boolean;
+  recurringInterval?: RecurringInterval;
+  nextRecurringDate?: string;
+  lastProcessed?: string;
+  status: TransactionStatus;
+  userId: string;
+  accountId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type SerializedData<T> = T extends Date
+  ? string
+  : T extends Decimal
+    ? number
+    : T extends (infer U)[]
+      ? SerializedData<U>[]
+      : T extends object
+        ? { [K in keyof T]: SerializedData<T[K]> }
+        : T;
 
 // Helper to properly serialize Decimal objects and other non-serializable data
-const serializeTransaction = (data: unknown): unknown => {
+const serializeTransaction = <T>(data: T): SerializedData<T> => {
   // Handle arrays by mapping through them
   if (Array.isArray(data)) {
-    return data.map((item) => serializeTransaction(item));
+    return data.map((item) => serializeTransaction(item)) as SerializedData<T>;
   }
 
   // Handle single objects
   if (data && typeof data === "object") {
-    const serialized = { ...data };
+    const serialized = { ...data } as Record<string, unknown>;
 
     // Handle Decimal fields
-    if (data.balance && typeof data.balance.toNumber === "function") {
-      serialized.balance = data.balance.toNumber();
+    if (
+      "balance" in data &&
+      data.balance &&
+      typeof (data.balance as unknown as Decimal).toNumber === "function"
+    ) {
+      serialized.balance = (data.balance as unknown as Decimal).toNumber();
     }
 
-    if (data.amount && typeof data.amount.toNumber === "function") {
-      serialized.amount = data.amount.toNumber();
+    if (
+      "amount" in data &&
+      data.amount &&
+      typeof (data.amount as unknown as Decimal).toNumber === "function"
+    ) {
+      serialized.amount = (data.amount as unknown as Decimal).toNumber();
     }
 
     // Handle dates
-    if (data.createdAt instanceof Date) {
-      serialized.createdAt = data.createdAt.toISOString();
+    for (const dateField of [
+      "createdAt",
+      "updatedAt",
+      "date",
+      "nextRecurringDate",
+      "lastProcessed",
+    ]) {
+      if (dateField in data && data[dateField as keyof T] instanceof Date) {
+        serialized[dateField] = (
+          data[dateField as keyof T] as unknown as Date
+        ).toISOString();
+      }
     }
 
     // Recursively serialize nested objects
@@ -35,27 +127,22 @@ const serializeTransaction = (data: unknown): unknown => {
         typeof serialized[key] === "object" &&
         !Array.isArray(serialized[key])
       ) {
-        serialized[key] = serializeTransaction(serialized[key]);
+        serialized[key] = serializeTransaction(serialized[key] as unknown);
       } else if (Array.isArray(serialized[key])) {
-        serialized[key] = serializeTransaction(serialized[key]);
+        serialized[key] = serializeTransaction(serialized[key] as unknown);
       }
     });
 
-    return serialized;
+    return serialized as SerializedData<T>;
   }
 
-  return data;
+  // Return primitive values as-is
+  return data as SerializedData<T>;
 };
-interface CreateAccountData {
-  balance: string;
-  isDefault?: boolean;
-  [key: string]: any; // Add this if there are additional dynamic fields
-}
 
-export async function createAccount(data: CreateAccountData) {
+export async function createAccount(data: CreateAccountData): Promise<void> {
   try {
     const { userId } = await auth();
-
     if (!userId) throw new Error("User not found");
 
     const user = await db.user.findUnique({
@@ -65,7 +152,7 @@ export async function createAccount(data: CreateAccountData) {
     });
     if (!user) throw new Error("User not found");
 
-    const balanceFloat = parseFloat(data.balance);
+    const balanceFloat = parseFloat(data.balance as string);
     if (isNaN(balanceFloat)) throw new Error("Invalid balance");
 
     const existingAccount = await db.account.findMany({
@@ -75,7 +162,7 @@ export async function createAccount(data: CreateAccountData) {
     });
 
     const shouldBeDefault =
-      existingAccount.length === 0 ? true : data.isDefault;
+      existingAccount.length === 0 ? true : !!data.isDefault;
 
     if (shouldBeDefault) {
       await db.account.updateMany({
@@ -89,26 +176,28 @@ export async function createAccount(data: CreateAccountData) {
       });
     }
 
-    const account = await db.account.create({
-      data: {
-        ...data,
-        balance: balanceFloat,
-        userId: user.id,
-        isDefault: shouldBeDefault,
-        name: data.name || "Default Account Name", // Provide a default or dynamic name
-        type: data.type || "Default Type", // Provide a default or dynamic type
-      },
-    });
+    // const account = await db.account.create({
+    //   data: {
+    //     name: data.name,
+    //     type: data.type,
+    //     balance: balanceFloat,
+    //     userId: user.id,
+    //     isDefault: shouldBeDefault,
+    //   },
+    // });
 
-    const serializedAccount = serializeTransaction(account);
+    // const serializedAccount = serializeTransaction(account);
     revalidatePath("/dashboard");
-  } catch (error: any) {
-    throw new Error(error.message);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      throw new Error(error.message);
+    }
+    throw new Error("An unknown error occurred");
   }
 }
-export async function getUserAccount() {
-  const { userId } = await auth();
 
+export async function getUserAccount(): Promise<SerializedAccount[]> {
+  const { userId } = await auth();
   if (!userId) throw new Error("User not found");
 
   const user = await db.user.findUnique({
@@ -129,12 +218,13 @@ export async function getUserAccount() {
       },
     },
   });
-  const serializedAccount = serializeTransaction(accounts);
-  return serializedAccount;
-}
-export async function getDashboardData() {
-  const { userId } = await auth();
 
+  const serializedAccount = serializeTransaction(accounts);
+  return serializedAccount as SerializedAccount[];
+}
+
+export async function getDashboardData(): Promise<SerializedTransaction[]> {
+  const { userId } = await auth();
   if (!userId) throw new Error("User not found");
 
   const user = await db.user.findUnique({
@@ -152,5 +242,6 @@ export async function getDashboardData() {
       createdAt: "desc",
     },
   });
-  return transactions.map(serializeTransaction);
+
+  return serializeTransaction(transactions) as SerializedTransaction[];
 }

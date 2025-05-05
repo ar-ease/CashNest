@@ -26,6 +26,6 @@ export const checkUser = async () => {
     });
     return newUser;
   } catch (error) {
-    // console.error(error);
+    throw new Error("Failed to check or create user.", error as Error);
   }
 };

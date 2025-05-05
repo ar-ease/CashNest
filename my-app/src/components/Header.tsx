@@ -1,10 +1,4 @@
-import {
-  SignedIn,
-  SignedOut,
-  UserButton,
-  SignInButton,
-  SignUpButton,
-} from "@clerk/nextjs";
+import { SignedIn, SignedOut, UserButton, SignInButton } from "@clerk/nextjs";
 import Image from "next/image";
 import Link from "next/link";
 import React from "react";

@@ -146,14 +146,14 @@ export default function EmailTemplate({
             {effectiveData.stats.byCategory && (
               <Section style={styles.section}>
                 <Heading style={styles.heading}>Expenses by Category</Heading>
-                {Object.entries(effectiveData.stats.byCategory).map(
-                  ([category, amount]) => (
-                    <div key={category} style={styles.row}>
-                      <Text style={styles.text}>{category}</Text>
-                      <Text style={styles.text}>${amount}</Text>
-                    </div>
-                  )
-                )}
+                {Object.entries(
+                  effectiveData.stats.byCategory as CategoryExpenses
+                ).map(([category, amount]) => (
+                  <div key={category} style={styles.row}>
+                    <Text style={styles.text}>{category}</Text>
+                    <Text style={styles.text}>${amount}</Text>
+                  </div>
+                ))}
               </Section>
             )}
 
