@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 
 // Helper to properly serialize Decimal objects and other non-serializable data
-const serializeTransaction = (data: any): any => {
+const serializeTransaction = (data: unknown): unknown => {
   // Handle arrays by mapping through them
   if (Array.isArray(data)) {
     return data.map((item) => serializeTransaction(item));
@@ -46,7 +46,13 @@ const serializeTransaction = (data: any): any => {
 
   return data;
 };
-export async function createAccount(data: any) {
+interface CreateAccountData {
+  balance: string;
+  isDefault?: boolean;
+  [key: string]: any; // Add this if there are additional dynamic fields
+}
+
+export async function createAccount(data: CreateAccountData) {
   try {
     const { userId } = await auth();
 
@@ -89,6 +95,8 @@ export async function createAccount(data: any) {
         balance: balanceFloat,
         userId: user.id,
         isDefault: shouldBeDefault,
+        name: data.name || "Default Account Name", // Provide a default or dynamic name
+        type: data.type || "Default Type", // Provide a default or dynamic type
       },
     });
 

@@ -3,14 +3,23 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-const serializeTransaction = (obj: any) => {
-  const serialized = { ...obj };
+const serializeTransaction = (obj: {
+  balance?: import("@prisma/client/runtime/library").Decimal;
+  amount?: import("@prisma/client/runtime/library").Decimal;
+  [key: string]: unknown;
+}) => {
+  const { ...rest } = obj;
+  const serialized: {
+    [key: string]: unknown;
+    balance?: number;
+    amount?: number;
+  } = {};
 
-  if (obj.balance) {
-    serialized.balance = obj.balance.toNumber();
+  if (rest.balance) {
+    serialized.balance = rest.balance.toNumber();
   }
-  if (obj.amount) {
-    serialized.balance = obj.balance.toNumber();
+  if (rest.amount) {
+    serialized.amount = rest.amount.toNumber();
   }
   return serialized;
 };

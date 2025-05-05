@@ -85,7 +85,7 @@ export async function getCurrentBudget(accountId: string) {
     console.log(`Current month expense transactions: ${currentMonthCount}`);
 
     // Create where clause without accountId first
-    const whereClause: any = {
+    const whereClause: Record<string, unknown> = {
       userId: user.id,
       type: "EXPENSE",
       date: {
