@@ -143,7 +143,7 @@ export function AddTransactionForm({
         date: new Date(data.date),
       });
     },
-    [editMode, editId]
+    [editMode, editId],
   );
   const {
     loading: transactionLoading,
@@ -170,7 +170,7 @@ export function AddTransactionForm({
         setIsSubmitting(false);
       });
     },
-    [transactionFn, isSubmitting]
+    [transactionFn, isSubmitting],
   );
 
   // Memoize the scan completion handler
@@ -188,7 +188,7 @@ export function AddTransactionForm({
         toast.success("Receipt scanned successfully");
       }
     },
-    [setValue]
+    [setValue],
   );
 
   // Use stable reference for navigation
@@ -201,7 +201,7 @@ export function AddTransactionForm({
       toast.success(
         editMode
           ? "Transaction updated successfully"
-          : "Transaction created successfully"
+          : "Transaction created successfully",
       );
       reset();
 
@@ -224,48 +224,48 @@ export function AddTransactionForm({
     (value: string) => {
       setValue("type", value as TransactionType);
     },
-    [setValue]
+    [setValue],
   );
 
   const handleAccountChange = useCallback(
     (value: string) => {
       setValue("accountId", value);
     },
-    [setValue]
+    [setValue],
   );
 
   const handleCategoryChange = useCallback(
     (value: string) => {
       setValue("category", value);
     },
-    [setValue]
+    [setValue],
   );
 
   const handleRecurringChange = useCallback(
     (checked: boolean) => {
       setValue("isRecurring", checked);
     },
-    [setValue]
+    [setValue],
   );
 
   const handleIntervalChange = useCallback(
     (value: string) => {
       setValue("recurringInterval", value as RecurringInterval);
     },
-    [setValue]
+    [setValue],
   );
 
   const handleDateSelect = useCallback(
     (date?: Date) => {
       if (date) setValue("date", date);
     },
-    [setValue]
+    [setValue],
   );
 
   // Memoize the filtered categories to avoid recalculation on every render
   const filteredCategories = useMemo(
     () => categories.filter((category) => category.type === type),
-    [categories, type]
+    [categories, type],
   );
 
   return (
@@ -379,7 +379,7 @@ export function AddTransactionForm({
                 variant="outline"
                 className={cn(
                   "w-full pl-3 text-left font-normal",
-                  !date && "text-muted-foreground"
+                  !date && "text-muted-foreground",
                 )}
               >
                 {date ? format(date, "PPP") : <span>Pick a date</span>}
