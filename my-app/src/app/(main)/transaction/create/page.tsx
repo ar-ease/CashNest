@@ -2,12 +2,8 @@ import { getUserAccount } from "@/actions/dashboard";
 import { defaultCategories } from "@/data/categories";
 import { AddTransactionForm } from "../_components/transaction-form";
 import { getTransaction } from "@/actions/transaction";
-
+import { PageProps } from "@/types/pageProps";
 // Define the page props to match Next.js 15's expected structure
-type PageProps = {
-  params: Promise<{ id?: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
 
 export default async function AddTransactionPage({ searchParams }: PageProps) {
   // Await the searchParams Promise to get the actual parameters

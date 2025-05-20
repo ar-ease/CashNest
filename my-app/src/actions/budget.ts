@@ -137,8 +137,17 @@ export async function getCurrentBudget(accountId: string) {
       console.log(`Found ${transactions.length} transactions directly`);
 
       if (transactions.length > 0) {
-        const manualSum = transactions.reduce(
-          (sum, t) =>
+        interface TransactionWithAmount {
+          amount:
+            | {
+                toNumber(): number;
+              }
+            | number
+            | string;
+        }
+
+        const manualSum: number = transactions.reduce(
+          (sum: number, t: TransactionWithAmount): number =>
             sum +
             (typeof t.amount === "object" && "toNumber" in t.amount
               ? t.amount.toNumber()

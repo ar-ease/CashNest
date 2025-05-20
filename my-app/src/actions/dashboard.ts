@@ -176,15 +176,15 @@ export async function createAccount(data: CreateAccountData): Promise<void> {
       });
     }
 
-    // const account = await db.account.create({
-    //   data: {
-    //     name: data.name,
-    //     type: data.type,
-    //     balance: balanceFloat,
-    //     userId: user.id,
-    //     isDefault: shouldBeDefault,
-    //   },
-    // });
+    await db.account.create({
+      data: {
+        name: data.name,
+        type: data.type,
+        balance: balanceFloat,
+        userId: user.id,
+        isDefault: shouldBeDefault,
+      },
+    });
 
     // const serializedAccount = serializeTransaction(account);
     revalidatePath("/dashboard");

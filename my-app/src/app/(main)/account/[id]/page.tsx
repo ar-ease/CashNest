@@ -4,13 +4,17 @@ import { notFound } from "next/navigation";
 import React, { Suspense } from "react";
 import TransactionTable from "../_components/transaction-table";
 import BarLoader from "react-spinners/BarLoader";
+import { PageProps } from "@/types/pageProps";
 
 // Import the PageProps type from Next.js generated types
-import { PageProps } from "/Users/ar-ease/Documents/Developer/Devshit/Projects/personal-project/project-102/my-app/.next/types/app/(main)/account/[id]/page";
 
 const AccountPage = async ({ params }: PageProps) => {
   // Await the params Promise to get the id
   const { id } = await params;
+
+  if (!id) {
+    return notFound();
+  }
 
   const accountData = await getAccountWithTransactions(id);
   // console.log(accountData);
@@ -54,6 +58,7 @@ const AccountPage = async ({ params }: PageProps) => {
           transactions={transactions.map((transaction) => ({
             ...transaction,
             type: transaction.type.toUpperCase() as "EXPENSE" | "INCOME",
+            amount: parseFloat(transaction.amount.toString()),
           }))}
         />
       </Suspense>
@@ -65,6 +70,7 @@ const AccountPage = async ({ params }: PageProps) => {
           transactions={transactions.map((transaction) => ({
             ...transaction,
             type: transaction.type.toUpperCase() as "EXPENSE" | "INCOME",
+            amount: parseFloat(transaction.amount.toString()),
           }))}
         />
       </Suspense>
