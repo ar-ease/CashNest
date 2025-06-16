@@ -7,15 +7,13 @@ import { Decimal } from "@prisma/client/runtime/library";
 
 // Use custom types
 import {
-  Transaction,
   TransactionType,
   RecurringInterval,
   TransactionStatus,
-  User,
   EventData,
   MonthlyStats,
 } from "@/types/transactionType";
-import { Account, AccountType } from "@/types/accountType";
+import { AccountType } from "@/types/accountType";
 
 // Database transaction client type
 type DatabaseTransaction = Parameters<Parameters<typeof db.$transaction>[0]>[0];
