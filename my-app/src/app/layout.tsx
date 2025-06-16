@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import header from "@/components/headerComponent";
+import HeaderComponent from "@/components/headerComponent";
 import React from "react";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "sonner";
@@ -21,7 +21,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body className={`${inter.className} `}>
-          <header />
+          <HeaderComponent />
           <main className="min-h-screen">{children}</main>
           <Toaster richColors />
 
