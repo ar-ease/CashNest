@@ -6,7 +6,7 @@ import { Button } from "./ui/button";
 import { LayoutDashboard, PenBox } from "lucide-react";
 import { checkUser } from "@/lib/checkuser";
 
-export const Header = async () => {
+export default async function Header() {
   await checkUser();
   return (
     <>
@@ -53,4 +53,4 @@ export const Header = async () => {
       </div>
     </>
   );
-};
+}
