@@ -12,7 +12,6 @@ import {
   RecurringInterval,
   TransactionStatus,
   User,
-  Budget,
   EventData,
   MonthlyStats,
 } from "@/types/transactionType";
@@ -185,28 +184,6 @@ interface TransactionAggregateResult {
 }
 
 // Helper functions to convert between Prisma and custom types
-function convertPrismaTransactionToCustom(
-  prismaTransaction: PrismaTransaction
-): Transaction {
-  return {
-    ...prismaTransaction,
-    amount: prismaTransaction.amount, // Keep as Decimal for custom type
-  };
-}
-
-function convertPrismaAccountToCustom(prismaAccount: PrismaAccount): Account {
-  return {
-    ...prismaAccount,
-    balance: prismaAccount.balance.toNumber(), // Convert Decimal to number
-    createdAt: prismaAccount.createdAt.toISOString(), // Convert Date to string
-  };
-}
-
-function convertPrismaUserToCustom(prismaUser: PrismaUser): User {
-  return {
-    ...prismaUser,
-  };
-}
 
 // Process recurring transaction function
 export const processRecurringTransaction = inngest.createFunction(
