@@ -2,6 +2,9 @@ import { db } from "@/lib/prisma";
 import { subDays } from "date-fns";
 import { Decimal } from "@prisma/client/runtime/library";
 
+// Database transaction client type
+type DatabaseTransaction = Parameters<Parameters<typeof db.$transaction>[0]>[0];
+
 const ACCOUNT_ID = "13d85ead-1228-4751-99c9-6944209e4f82";
 const USER_ID = "5643ed10-5c76-4c49-b2db-bfa053eb4b9b";
 
@@ -104,7 +107,7 @@ export async function seedTransactions(): Promise<SeedResult> {
     }
 
     // Insert transactions and update account balance
-    await db.$transaction(async (tx) => {
+    await db.$transaction(async (tx: DatabaseTransaction) => {
       // Clear existing transactions
       await tx.transaction.deleteMany({
         where: { accountId: ACCOUNT_ID },
