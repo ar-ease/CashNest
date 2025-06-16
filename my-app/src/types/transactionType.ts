@@ -1,4 +1,4 @@
-import { Account } from "@/types/account";
+import { Account } from "@/types/accountType";
 import { Decimal } from "@prisma/client/runtime/library";
 
 // Match the Prisma enum exactly

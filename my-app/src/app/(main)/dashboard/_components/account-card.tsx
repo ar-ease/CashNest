@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect } from "react";
-import { Account } from "@/types/account";
+import { Account } from "@/types/accountType";
 import {
   Card,
   CardContent,

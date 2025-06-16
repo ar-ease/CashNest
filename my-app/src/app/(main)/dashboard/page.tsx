@@ -1,4 +1,4 @@
-import { Account } from "@/types/account";
+import { Account } from "@/types/accountType";
 import { Card, CardContent } from "@/components/ui/card";
 import CreateAccountDrawer from "@/components/create-account-drawer";
 import { Plus } from "lucide-react";

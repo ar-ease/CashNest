@@ -11,8 +11,8 @@ import {
   TransactionType,
   RecurringInterval,
   TransactionStatus,
-} from "@/types/transaction";
-import { Account } from "@/types/account";
+} from "@/types/transactionType";
+import { Account } from "@/types/accountType";
 import { Decimal } from "@prisma/client/runtime/library";
 
 // Database transaction client type
