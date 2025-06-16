@@ -5,54 +5,28 @@ import { sendEmail } from "@/actions/send-email";
 import EmailTemplate from "../../../emails/template";
 import { Decimal } from "@prisma/client/runtime/library";
 
-// Define types
-type TransactionType = "EXPENSE" | "INCOME";
-type RecurringInterval = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+// Use Prisma-generated types instead of custom types
+import {
+  Transaction,
+  TransactionType,
+  RecurringInterval,
+  TransactionStatus,
+  User,
+  Budget,
+  Account,
+  Prisma,
+} from "@prisma/client";
 
-interface Transaction {
-  id: string;
-  type: TransactionType;
-  amount: Decimal;
-  description: string;
-  date: Date;
-  category: string;
-  userId: string;
-  accountId: string;
-  isRecurring: boolean;
-  recurringInterval?: RecurringInterval | null;
-  nextRecurringDate?: Date | null;
-  lastProcessed?: Date | null;
-  status?: string;
-  account?: Account;
-}
+// Database transaction client type
+type DatabaseTransaction = Parameters<Parameters<typeof db.$transaction>[0]>[0];
 
-interface Account {
-  id: string;
-  name: string;
-  balance: Decimal;
-  isDefault?: boolean;
-}
-
-interface User {
-  id: string;
-  name: string | null;
-  email: string;
-  accounts: Account[];
-}
-
-interface Budget {
-  id: string;
-  userId: string;
-  amount: Decimal;
-  lastAlertSent: Date | null;
-  user: User;
-}
-
+// Custom event data interface (not in Prisma)
 interface EventData {
   transactionId: string;
   userId: string;
 }
 
+// Custom monthly stats interface (not in Prisma)
 interface MonthlyStats {
   totalExpenses: number;
   totalIncome: number;
@@ -60,11 +34,111 @@ interface MonthlyStats {
   transactionCount: number;
 }
 
+// Email result interface
 interface EmailResult {
   success: boolean;
   error?: string;
 }
 
+// Inngest event types
+interface InngestEvent<T = unknown> {
+  data: T;
+  name?: string;
+  ts?: number;
+}
+
+interface InngestStep {
+  run: <T>(name: string, fn: () => Promise<T>) => Promise<T>;
+  sleep?: (name: string, duration: string) => Promise<void>;
+}
+
+interface InngestContext<T = unknown> {
+  event: InngestEvent<T>;
+  step: InngestStep;
+}
+
+// Function result types
+interface ProcessTransactionResult {
+  status: "processed" | "skipped";
+  reason?: string;
+  transactionId?: string;
+  error?: string;
+}
+
+interface TriggerRecurringResult {
+  triggered: number;
+}
+
+interface MonthlyReportResult {
+  processed: number;
+}
+
+interface BudgetAlertResult {
+  status: "completed";
+}
+
+// Extended types for database operations using Prisma types
+type TransactionWithAccount = Transaction & {
+  account: Account;
+};
+
+type UserWithAccounts = User & {
+  accounts: Account[];
+};
+
+type BudgetWithUser = Budget & {
+  user: UserWithAccounts;
+};
+
+// Transaction creation data using Prisma input type
+type RecurringTransactionCreateInput = Prisma.TransactionCreateInput;
+
+// Transaction update data
+interface TransactionUpdateData {
+  lastProcessed: Date;
+  nextRecurringDate: Date;
+}
+
+// Account balance update data
+interface AccountBalanceUpdate {
+  balance: {
+    increment: number;
+  };
+}
+
+// Budget update data
+interface BudgetUpdateData {
+  lastAlertSent: Date;
+}
+
+// Email template props
+interface EmailTemplateProps {
+  userName: string;
+  type: "budget-alert" | "monthly-report";
+  data: BudgetAlertData | MonthlyReportData;
+}
+
+interface BudgetAlertData {
+  percentageUsed: number;
+  budgetAmount: number;
+  totalExpenses: number;
+  accountName: string;
+}
+
+interface MonthlyReportData {
+  stats: MonthlyStats;
+  month: string;
+  insights: string[];
+}
+
+// Aggregate result type
+interface TransactionAggregateResult {
+  _sum: {
+    amount: Decimal | null;
+  };
+}
+
+// Process recurring transaction function
 export const processRecurringTransaction = inngest.createFunction(
   {
     id: "process-recurring-transaction",
@@ -79,84 +153,96 @@ export const processRecurringTransaction = inngest.createFunction(
   async ({
     event,
     step,
-  }: {
-    event: { data: EventData };
-    step: {
-      run: <T>(name: string, fn: () => Promise<T>) => Promise<T>;
-    };
-  }) => {
+  }: InngestContext<EventData>): Promise<ProcessTransactionResult> => {
     // Validate event data
     if (!event?.data?.transactionId || !event?.data?.userId) {
       console.error("Invalid event data:", event);
-      return { error: "Missing required event data" };
+      return { status: "skipped", error: "Missing required event data" };
     }
 
-    return await step.run("process-transaction", async () => {
-      const transaction = (await db.transaction.findUnique({
-        where: {
-          id: event.data.transactionId,
-          userId: event.data.userId,
-        },
-        include: {
-          account: true,
-        },
-      })) as Transaction | null;
+    return await step.run(
+      "process-transaction",
+      async (): Promise<ProcessTransactionResult> => {
+        const transaction = (await db.transaction.findUnique({
+          where: {
+            id: event.data.transactionId,
+            userId: event.data.userId,
+          },
+          include: {
+            account: true,
+          },
+        })) as TransactionWithAccount | null;
 
-      if (
-        !transaction ||
-        !transaction.nextRecurringDate ||
-        !isTransactionDue({
-          lastProcessed: transaction.lastProcessed,
-          nextRecurringDate: transaction.nextRecurringDate,
-        })
-      )
-        return {
-          status: "skipped",
-          reason: "Transaction not due or not found",
-        };
+        if (
+          !transaction ||
+          !transaction.nextRecurringDate ||
+          !isTransactionDue({
+            lastProcessed: transaction.lastProcessed,
+            nextRecurringDate: transaction.nextRecurringDate,
+          })
+        ) {
+          return {
+            status: "skipped",
+            reason: "Transaction not due or not found",
+          };
+        }
 
-      // Create new transaction and update account balance in a transaction
-      await db.$transaction(async (tx) => {
-        // Create new transaction
-        await tx.transaction.create({
-          data: {
+        // Create new transaction and update account balance in a transaction
+        await db.$transaction(async (tx: DatabaseTransaction) => {
+          // Create new transaction using Prisma input type
+          const transactionCreateInput: RecurringTransactionCreateInput = {
             type: transaction.type,
             amount: transaction.amount,
             description: `${transaction.description} (Recurring)`,
             date: new Date(),
             category: transaction.category,
-            userId: transaction.userId,
-            accountId: transaction.accountId,
             isRecurring: false,
-          },
-        });
+            status: TransactionStatus.COMPLETED,
+            user: {
+              connect: { id: transaction.userId },
+            },
+            account: {
+              connect: { id: transaction.accountId },
+            },
+          };
 
-        // Update account balance
-        const balanceChange =
-          transaction.type === "EXPENSE"
-            ? -transaction.amount.toNumber()
-            : transaction.amount.toNumber();
+          await tx.transaction.create({
+            data: transactionCreateInput,
+          });
 
-        await tx.account.update({
-          where: { id: transaction.accountId },
-          data: { balance: { increment: balanceChange } },
-        });
+          // Update account balance
+          const balanceChange: number =
+            transaction.type === TransactionType.EXPENSE
+              ? -transaction.amount.toNumber()
+              : transaction.amount.toNumber();
 
-        // Update last processed date and next recurring date
-        await tx.transaction.update({
-          where: { id: transaction.id },
-          data: {
+          const balanceUpdateData: AccountBalanceUpdate = {
+            balance: { increment: balanceChange },
+          };
+
+          await tx.account.update({
+            where: { id: transaction.accountId },
+            data: balanceUpdateData,
+          });
+
+          // Update last processed date and next recurring date
+          const updateData: TransactionUpdateData = {
             lastProcessed: new Date(),
             nextRecurringDate: calculateNextRecurringDate(
               new Date(),
               transaction.recurringInterval as RecurringInterval
             ),
-          },
-        });
-      });
+          };
 
-      return { status: "processed", transactionId: transaction.id };
-    });
+          await tx.transaction.update({
+            where: { id: transaction.id },
+            data: updateData,
+          });
+        });
+
+        return { status: "processed", transactionId: transaction.id };
+      }
+    );
   }
 );
 
@@ -167,20 +253,14 @@ export const triggerRecurringTransactions = inngest.createFunction(
     name: "Trigger Recurring Transactions",
   },
   { cron: "0 0 * * *" }, // Daily at midnight
-  async ({
-    step,
-  }: {
-    step: {
-      run: <T>(name: string, fn: () => Promise<T>) => Promise<T>;
-    };
-  }) => {
+  async ({ step }: { step: InngestStep }): Promise<TriggerRecurringResult> => {
     const recurringTransactions = await step.run(
       "fetch-recurring-transactions",
-      async () => {
-        return (await db.transaction.findMany({
+      async (): Promise<Transaction[]> => {
+        return await db.transaction.findMany({
           where: {
             isRecurring: true,
-            status: "COMPLETED",
+            status: TransactionStatus.COMPLETED,
             OR: [
               { lastProcessed: null },
               {
@@ -190,13 +270,13 @@ export const triggerRecurringTransactions = inngest.createFunction(
               },
             ],
           },
-        })) as Transaction[];
+        });
       }
     );
 
     // Send event for each recurring transaction in batches
     if (recurringTransactions.length > 0) {
-      const events = recurringTransactions.map((transaction) => ({
+      const events = recurringTransactions.map((transaction: Transaction) => ({
         name: "transaction.recurring.process",
         data: {
           transactionId: transaction.id,
@@ -212,7 +292,7 @@ export const triggerRecurringTransactions = inngest.createFunction(
   }
 );
 
-// 2. Monthly Report Generation
+// Generate financial insights using AI
 async function generateFinancialInsights(
   stats: MonthlyStats,
   month: string
@@ -230,7 +310,7 @@ async function generateFinancialInsights(
     - Total Expenses: $${stats.totalExpenses}
     - Net Income: $${stats.totalIncome - stats.totalExpenses}
     - Expense Categories: ${Object.entries(stats.byCategory)
-      .map(([category, amount]) => `${category}: $${amount}`)
+      .map(([category, amount]: [string, number]) => `${category}: $${amount}`)
       .join(", ")}
 
     Format the response as a JSON array of strings, like this:
@@ -243,7 +323,7 @@ async function generateFinancialInsights(
     const text = response.text();
     const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
 
-    return JSON.parse(cleanedText);
+    return JSON.parse(cleanedText) as string[];
   } catch (error) {
     console.error("Error generating insights:", error);
     return [
@@ -254,50 +334,55 @@ async function generateFinancialInsights(
   }
 }
 
+// Monthly report generation
 export const generateMonthlyReports = inngest.createFunction(
   {
     id: "generate-monthly-reports",
     name: "Generate Monthly Reports",
   },
   { cron: "0 0 1 * *" }, // First day of each month
-  async ({
-    step,
-  }: {
-    step: {
-      run: <T>(name: string, fn: () => Promise<T>) => Promise<T>;
-    };
-  }) => {
-    const users = await step.run("fetch-users", async () => {
-      return (await db.user.findMany({
-        include: { accounts: true },
-      })) as User[];
-    });
+  async ({ step }: { step: InngestStep }): Promise<MonthlyReportResult> => {
+    const users = await step.run(
+      "fetch-users",
+      async (): Promise<UserWithAccounts[]> => {
+        return await db.user.findMany({
+          include: { accounts: true },
+        });
+      }
+    );
 
     for (const user of users) {
-      await step.run(`generate-report-${user.id}`, async () => {
+      await step.run(`generate-report-${user.id}`, async (): Promise<void> => {
         const lastMonth = new Date();
         lastMonth.setMonth(lastMonth.getMonth() - 1);
 
-        const stats = await getMonthlyStats(user.id, lastMonth);
-        const monthName = lastMonth.toLocaleString("default", {
+        const stats: MonthlyStats = await getMonthlyStats(user.id, lastMonth);
+        const monthName: string = lastMonth.toLocaleString("default", {
           month: "long",
         });
 
         // Generate AI insights
-        const insights = await generateFinancialInsights(stats, monthName);
+        const insights: string[] = await generateFinancialInsights(
+          stats,
+          monthName
+        );
+
+        const emailData: MonthlyReportData = {
+          stats,
+          month: monthName,
+          insights,
+        };
+
+        const emailProps: EmailTemplateProps = {
+          userName: user.name || "User",
+          type: "monthly-report",
+          data: emailData,
+        };
 
         await sendEmail({
           to: user.email,
           subject: `Your Monthly Financial Report - ${monthName}`,
-          react: EmailTemplate({
-            userName: user.name || "User",
-            type: "monthly-report" as const,
-            data: {
-              stats,
-              month: monthName,
-              insights,
-            },
-          }),
+          react: EmailTemplate(emailProps),
         });
       });
     }
@@ -306,39 +391,37 @@ export const generateMonthlyReports = inngest.createFunction(
   }
 );
 
+// Budget alert checking
 export const checkBudgetAlert = inngest.createFunction(
   { id: "check-budget-alerts", name: "Check Budget Alerts" },
   { cron: "0 */6 * * *" }, // Fixed cron expression (every 6 hours)
-  async ({
-    step,
-  }: {
-    step: {
-      run: <T>(name: string, fn: () => Promise<T>) => Promise<T>;
-    };
-  }) => {
+  async ({ step }: { step: InngestStep }): Promise<BudgetAlertResult> => {
     try {
       console.log("Starting budget alert check:", new Date().toISOString());
 
-      const budgets = await step.run("fetch-budget", async () => {
-        return (await db.budget.findMany({
-          include: {
-            user: {
-              include: {
-                accounts: {
-                  where: {
-                    isDefault: true,
+      const budgets = await step.run(
+        "fetch-budget",
+        async (): Promise<BudgetWithUser[]> => {
+          return await db.budget.findMany({
+            include: {
+              user: {
+                include: {
+                  accounts: {
+                    where: {
+                      isDefault: true,
+                    },
                   },
                 },
               },
             },
-          },
-        })) as Budget[];
-      });
+          });
+        }
+      );
 
       console.log(`Found ${budgets.length} budgets to check`);
 
       for (const budget of budgets) {
-        const defaultAccount = budget.user.accounts[0];
+        const defaultAccount: Account | undefined = budget.user.accounts[0];
         if (!defaultAccount) {
           console.log(
             `Budget ${budget.id}: No default account found, skipping`
@@ -346,7 +429,7 @@ export const checkBudgetAlert = inngest.createFunction(
           continue;
         }
 
-        await step.run(`check-budget-${budget.id}`, async () => {
+        await step.run(`check-budget-${budget.id}`, async (): Promise<void> => {
           try {
             // Get current month date range
             const currentDate = new Date();
@@ -362,11 +445,11 @@ export const checkBudgetAlert = inngest.createFunction(
             );
 
             // Calculate expenses for the current month
-            const expenses = await db.transaction.aggregate({
+            const expenses = (await db.transaction.aggregate({
               where: {
                 userId: budget.userId,
                 accountId: defaultAccount.id,
-                type: "EXPENSE",
+                type: TransactionType.EXPENSE,
                 date: {
                   gte: startOfMonth,
                   lte: endOfMonth,
@@ -375,14 +458,16 @@ export const checkBudgetAlert = inngest.createFunction(
               _sum: {
                 amount: true,
               },
-            });
+            })) as TransactionAggregateResult;
 
-            const totalExpenses = expenses._sum.amount?.toNumber() || 0;
-            const budgetAmount = budget.amount.toNumber();
-            const percentageUsed = (totalExpenses / budgetAmount) * 100;
+            const totalExpenses: number = expenses._sum.amount?.toNumber() || 0;
+            const budgetAmount: number = budget.amount.toNumber();
+            const percentageUsed: number = (totalExpenses / budgetAmount) * 100;
 
             console.log(
-              `Budget ${budget.id}: ${percentageUsed.toFixed(2)}% used (${totalExpenses}/${budgetAmount})`
+              `Budget ${budget.id}: ${percentageUsed.toFixed(
+                2
+              )}% used (${totalExpenses}/${budgetAmount})`
             );
 
             // Send alert if:
@@ -397,16 +482,18 @@ export const checkBudgetAlert = inngest.createFunction(
               );
 
               try {
-                // Fix: Create EmailTemplate props with correct types
-                const emailProps = {
+                // Create EmailTemplate props with correct types
+                const alertData: BudgetAlertData = {
+                  percentageUsed,
+                  budgetAmount: parseFloat(budgetAmount.toFixed(1)),
+                  totalExpenses: parseFloat(totalExpenses.toFixed(1)),
+                  accountName: defaultAccount.name,
+                };
+
+                const emailProps: EmailTemplateProps = {
                   userName: budget.user.name ?? "User",
-                  type: "budget-alert" as const, // Add 'as const' to ensure correct type
-                  data: {
-                    percentageUsed,
-                    budgetAmount: parseFloat(budgetAmount.toFixed(1)),
-                    totalExpenses: parseFloat(totalExpenses.toFixed(1)),
-                    accountName: defaultAccount.name,
-                  },
+                  type: "budget-alert",
+                  data: alertData,
                 };
 
                 // Send the email with correctly typed props
@@ -421,17 +508,21 @@ export const checkBudgetAlert = inngest.createFunction(
                   console.log(`Budget ${budget.id}: Email sent successfully`);
 
                   // Update lastAlertSent timestamp
+                  const updateData: BudgetUpdateData = {
+                    lastAlertSent: new Date(),
+                  };
+
                   await db.budget.update({
                     where: {
                       id: budget.id,
                     },
-                    data: {
-                      lastAlertSent: new Date(),
-                    },
+                    data: updateData,
                   });
 
                   console.log(
-                    `Budget ${budget.id}: lastAlertSent updated to ${new Date().toISOString()}`
+                    `Budget ${
+                      budget.id
+                    }: lastAlertSent updated to ${new Date().toISOString()}`
                   );
                 } else {
                   console.error(
@@ -463,9 +554,14 @@ export const checkBudgetAlert = inngest.createFunction(
   }
 );
 
-function isNewMonth(lastAlertDate: Date | null, currentDate: Date): boolean {
+// Helper functions
+function isNewMonth(
+  lastAlertDate: Date | null | undefined,
+  currentDate: Date
+): boolean {
   return (
     lastAlertDate === null ||
+    lastAlertDate === undefined ||
     lastAlertDate.getFullYear() !== currentDate.getFullYear() ||
     lastAlertDate.getMonth() !== currentDate.getMonth()
   );
@@ -491,16 +587,16 @@ function calculateNextRecurringDate(
 ): Date {
   const next = new Date(date);
   switch (interval) {
-    case "DAILY":
+    case RecurringInterval.DAILY:
       next.setDate(next.getDate() + 1);
       break;
-    case "WEEKLY":
+    case RecurringInterval.WEEKLY:
       next.setDate(next.getDate() + 7);
       break;
-    case "MONTHLY":
+    case RecurringInterval.MONTHLY:
       next.setMonth(next.getMonth() + 1);
       break;
-    case "YEARLY":
+    case RecurringInterval.YEARLY:
       next.setFullYear(next.getFullYear() + 1);
       break;
     default:
@@ -516,7 +612,7 @@ async function getMonthlyStats(
   const startDate = new Date(month.getFullYear(), month.getMonth(), 1);
   const endDate = new Date(month.getFullYear(), month.getMonth() + 1, 0);
 
-  const transactions = (await db.transaction.findMany({
+  const transactions = await db.transaction.findMany({
     where: {
       userId,
       date: {
@@ -524,12 +620,12 @@ async function getMonthlyStats(
         lte: endDate,
       },
     },
-  })) as Transaction[];
+  });
 
   return transactions.reduce(
-    (stats, t) => {
-      const amount = t.amount.toNumber();
-      if (t.type === "EXPENSE") {
+    (stats: MonthlyStats, t: Transaction) => {
+      const amount: number = t.amount.toNumber();
+      if (t.type === TransactionType.EXPENSE) {
         stats.totalExpenses += amount;
         stats.byCategory[t.category] =
           (stats.byCategory[t.category] || 0) + amount;

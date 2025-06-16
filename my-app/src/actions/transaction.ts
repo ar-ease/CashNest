@@ -6,12 +6,37 @@ import { revalidatePath } from "next/cache";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import aj from "@/lib/arcjet";
 import { request } from "@arcjet/next";
-import { Transaction } from "@prisma/client";
+import {
+  Transaction,
+  TransactionType,
+  RecurringInterval,
+  TransactionStatus,
+} from "@/types/transaction";
+import { Account } from "@/types/account";
+import { Decimal } from "@prisma/client/runtime/library";
 
-// Types
-type RecurringInterval = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
-type TransactionType = "EXPENSE" | "INCOME";
+// Database transaction client type
+type DatabaseTransaction = Parameters<Parameters<typeof db.$transaction>[0]>[0];
 
+// Extended types for database operations
+type TransactionWithAccount = Transaction & {
+  account: Account;
+};
+
+// Serialized Transaction type for client responses
+type SerializedTransaction = Omit<Transaction, "amount"> & {
+  amount: number;
+};
+
+type SerializedTransactionWithAccount = Omit<
+  TransactionWithAccount,
+  "amount"
+> & {
+  amount: number;
+  account: Omit<Account, "balance"> & { balance: number };
+};
+
+// Input/Output interfaces
 interface TransactionData {
   accountId: string;
   amount: number;
@@ -20,7 +45,38 @@ interface TransactionData {
   description: string;
   date: Date;
   isRecurring?: boolean;
-  recurringInterval?: RecurringInterval;
+  recurringInterval?: RecurringInterval | null;
+  receiptUrl?: string;
+  status?: TransactionStatus;
+}
+
+interface TransactionCreateData {
+  type: TransactionType;
+  amount: Decimal;
+  description: string;
+  date: Date;
+  category: string;
+  isRecurring: boolean;
+  recurringInterval: RecurringInterval | null;
+  userId: string;
+  accountId: string;
+  nextRecurringDate: Date | null;
+  receiptUrl?: string | null;
+  status: TransactionStatus;
+}
+
+interface TransactionUpdateData {
+  type?: TransactionType;
+  amount?: Decimal;
+  description?: string;
+  date?: Date;
+  category?: string;
+  isRecurring?: boolean;
+  recurringInterval?: RecurringInterval | null;
+  accountId?: string;
+  nextRecurringDate?: Date | null;
+  receiptUrl?: string | null;
+  status?: TransactionStatus;
 }
 
 interface ReceiptData {
@@ -33,29 +89,89 @@ interface ReceiptData {
 
 interface TransactionResponse {
   success: boolean;
-  data: Omit<Transaction, "amount"> & { amount: number };
+  data: SerializedTransaction;
+}
+
+interface TransactionsListResponse {
+  success: boolean;
+  data: SerializedTransaction[];
+}
+
+// Query interfaces for filtering
+interface TransactionQuery {
+  type?: TransactionType;
+  category?: string;
+  accountId?: string;
+  isRecurring?: boolean;
+  status?: TransactionStatus;
+  date?: {
+    gte?: Date;
+    lte?: Date;
+  };
+  amount?: {
+    gte?: number;
+    lte?: number;
+  };
+}
+
+// Where clause types for queries
+interface TransactionWhereInput {
+  userId?: string;
+  type?: TransactionType;
+  category?: string;
+  accountId?: string;
+  isRecurring?: boolean;
+  status?: TransactionStatus;
+  date?: {
+    gte?: Date;
+    lte?: Date;
+  };
+  amount?: {
+    gte?: Decimal;
+    lte?: Decimal;
+  };
+}
+
+// Aggregate query result types
+interface TransactionAggregateResult {
+  _sum: {
+    amount: Decimal | null;
+  };
+}
+
+interface TransactionStatsResponse {
+  totalIncome: number;
+  totalExpenses: number;
+  transactionCount: number;
+  balance: number;
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// const serializeAmount = (
-//   obj: Transaction
-// ): Transaction & { amount: number } => ({
-//   ...obj,
-//   amount: obj.amount.toNumber(),
-// });
-const serializeAmount = (
-  obj: Transaction
-): Omit<Transaction, "amount"> & { amount: number } => ({
-  ...obj,
-  amount: obj.amount.toNumber(),
+// Helper function to serialize Decimal amounts to numbers
+const serializeTransaction = (
+  transaction: Transaction
+): SerializedTransaction => ({
+  ...transaction,
+  amount: transaction.amount.toNumber(),
 });
-// const serializeAmount = (
-//   obj: Transaction
-// ): Transaction & { amount: number } => ({
-//   ...obj,
-//   amount: obj.amount.toNumber(),
-// });
+
+// Helper function to serialize transaction with account
+const serializeTransactionWithAccount = (
+  transaction: TransactionWithAccount
+): SerializedTransactionWithAccount => ({
+  ...transaction,
+  amount: transaction.amount.toNumber(),
+  account: {
+    ...transaction.account,
+    balance: transaction.account.balance,
+  },
+});
+
+// Helper function to serialize multiple transactions
+const serializeTransactions = (
+  transactions: Transaction[]
+): SerializedTransaction[] => transactions.map(serializeTransaction);
 
 // Create Transaction
 export async function createTransaction(
@@ -107,31 +223,45 @@ export async function createTransaction(
     const balanceChange = data.type === "EXPENSE" ? -data.amount : data.amount;
     const newBalance = account.balance.toNumber() + balanceChange;
 
-    const transaction = await db.$transaction(async (tx) => {
-      const newTransaction = await tx.transaction.create({
-        data: {
-          ...data,
-          userId: user.id,
-          nextRecurringDate:
-            data.isRecurring && data.recurringInterval
-              ? calculateNextRecurringDate(data.date, data.recurringInterval)
-              : null,
-        },
-      });
+    const transactionCreateData: TransactionCreateData = {
+      type: data.type,
+      amount: new Decimal(data.amount),
+      description: data.description,
+      date: data.date,
+      category: data.category,
+      isRecurring: data.isRecurring || false,
+      recurringInterval: data.recurringInterval || null,
+      userId: user.id,
+      accountId: data.accountId,
+      receiptUrl: data.receiptUrl || null,
+      status: data.status || "COMPLETED",
+      nextRecurringDate:
+        data.isRecurring && data.recurringInterval
+          ? calculateNextRecurringDate(data.date, data.recurringInterval)
+          : null,
+    };
 
-      await tx.account.update({
-        where: { id: data.accountId },
-        data: { balance: newBalance },
-      });
+    const transaction = await db.$transaction(
+      async (tx: DatabaseTransaction) => {
+        const newTransaction = await tx.transaction.create({
+          data: transactionCreateData,
+        });
 
-      return newTransaction;
-    });
+        await tx.account.update({
+          where: { id: data.accountId },
+          data: { balance: new Decimal(newBalance) },
+        });
+
+        return newTransaction as Transaction;
+      }
+    );
 
     revalidatePath("/dashboard");
     revalidatePath(`/account/${transaction.accountId}`);
 
-    return { success: true, data: serializeAmount(transaction) };
+    return { success: true, data: serializeTransaction(transaction) };
   } catch (error) {
+    console.error("Error creating transaction:", error);
     if (error instanceof Error) {
       throw new Error(error.message);
     }
@@ -139,17 +269,68 @@ export async function createTransaction(
   }
 }
 
-export async function getTransaction(id: string) {
+export async function getTransaction(
+  id: string
+): Promise<SerializedTransaction | null> {
   console.log("Getting transaction with ID:", id);
   try {
-    // Your existing code
-    const transaction = await db.transaction.findUnique({
-      where: { id },
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    const user = await db.user.findUnique({
+      where: { clerkUserId: userId },
     });
+
+    if (!user) throw new Error("User not found");
+
+    const transaction = await db.transaction.findUnique({
+      where: {
+        id,
+        userId: user.id,
+      },
+    });
+
     console.log("Transaction found:", transaction);
-    return transaction;
+
+    if (!transaction) return null;
+
+    return serializeTransaction(transaction as Transaction);
   } catch (error) {
     console.error("Error in getTransaction:", error);
+    return null;
+  }
+}
+
+export async function getTransactionWithAccount(
+  id: string
+): Promise<SerializedTransactionWithAccount | null> {
+  try {
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    const user = await db.user.findUnique({
+      where: { clerkUserId: userId },
+    });
+
+    if (!user) throw new Error("User not found");
+
+    const transaction = await db.transaction.findUnique({
+      where: {
+        id,
+        userId: user.id,
+      },
+      include: {
+        account: true,
+      },
+    });
+
+    if (!transaction) return null;
+
+    return serializeTransactionWithAccount(
+      transaction as unknown as TransactionWithAccount
+    );
+  } catch (error) {
+    console.error("Error in getTransactionWithAccount:", error);
     return null;
   }
 }
@@ -168,19 +349,96 @@ export async function updateTransaction(
 
     if (!user) throw new Error("User not found");
 
-    const transaction = await db.transaction.update({
+    // First, get the original transaction to calculate balance changes
+    const originalTransaction = await db.transaction.findUnique({
       where: { id, userId: user.id },
-      data: {
-        ...data,
-        nextRecurringDate:
-          data.isRecurring && data.recurringInterval
-            ? calculateNextRecurringDate(data.date, data.recurringInterval)
-            : null,
-      },
+      include: { account: true },
     });
 
+    if (!originalTransaction) throw new Error("Transaction not found");
+
+    const balanceChange = data.type === "EXPENSE" ? -data.amount : data.amount;
+    const originalBalanceChange =
+      originalTransaction.type === "EXPENSE"
+        ? originalTransaction.amount.toNumber()
+        : -originalTransaction.amount.toNumber();
+
+    const netBalanceChange = balanceChange + originalBalanceChange;
+    const newBalance =
+      originalTransaction.account.balance.toNumber() + netBalanceChange;
+
+    const transactionUpdateData: TransactionUpdateData = {
+      type: data.type,
+      amount: new Decimal(data.amount),
+      description: data.description,
+      date: data.date,
+      category: data.category,
+      isRecurring: data.isRecurring || false,
+      recurringInterval: data.recurringInterval || null,
+      accountId: data.accountId,
+      receiptUrl: data.receiptUrl || null,
+      status: data.status || "COMPLETED",
+      nextRecurringDate:
+        data.isRecurring && data.recurringInterval
+          ? calculateNextRecurringDate(data.date, data.recurringInterval)
+          : null,
+    };
+
+    const transaction = await db.$transaction(
+      async (tx: DatabaseTransaction) => {
+        const updatedTransaction = await tx.transaction.update({
+          where: { id, userId: user.id },
+          data: transactionUpdateData,
+        });
+
+        // Handle account switching
+        if (data.accountId !== originalTransaction.accountId) {
+          // Remove from old account
+          await tx.account.update({
+            where: { id: originalTransaction.accountId },
+            data: {
+              balance: new Decimal(
+                originalTransaction.account.balance.toNumber() +
+                  originalBalanceChange
+              ),
+            },
+          });
+
+          // Add to new account
+          const newAccount = await tx.account.findUnique({
+            where: { id: data.accountId, userId: user.id },
+          });
+
+          if (!newAccount) throw new Error("New account not found");
+
+          await tx.account.update({
+            where: { id: data.accountId },
+            data: {
+              balance: new Decimal(
+                newAccount.balance.toNumber() + balanceChange
+              ),
+            },
+          });
+        } else {
+          // Update same account balance
+          await tx.account.update({
+            where: { id: data.accountId },
+            data: { balance: new Decimal(newBalance) },
+          });
+        }
+
+        return updatedTransaction as Transaction;
+      }
+    );
+
     revalidatePath(`/transaction/${id}`);
-    return { success: true, data: serializeAmount(transaction) };
+    revalidatePath("/dashboard");
+    revalidatePath(`/account/${transaction.accountId}`);
+    if (originalTransaction.accountId !== transaction.accountId) {
+      revalidatePath(`/account/${originalTransaction.accountId}`);
+    }
+
+    return { success: true, data: serializeTransaction(transaction) };
   } catch (error) {
     console.error("Error updating transaction:", error);
     throw new Error("Failed to update transaction");
@@ -188,11 +446,8 @@ export async function updateTransaction(
 }
 
 export async function getUserTransactions(
-  query: Record<string, unknown> = {}
-): Promise<{
-  success: boolean;
-  data: Transaction[];
-}> {
+  queryParams: TransactionQuery = {}
+): Promise<TransactionsListResponse> {
   try {
     const { userId } = await auth();
     if (!userId) throw new Error("Unauthorized");
@@ -203,14 +458,93 @@ export async function getUserTransactions(
 
     if (!user) throw new Error("User not found");
 
+    // Build where clause for filtering
+    const where: TransactionWhereInput = {
+      userId: user.id,
+      ...(queryParams.type && { type: queryParams.type }),
+      ...(queryParams.category && { category: queryParams.category }),
+      ...(queryParams.accountId && { accountId: queryParams.accountId }),
+      ...(queryParams.isRecurring !== undefined && {
+        isRecurring: queryParams.isRecurring,
+      }),
+      ...(queryParams.status && { status: queryParams.status }),
+      ...(queryParams.date && { date: queryParams.date }),
+      ...(queryParams.amount && {
+        amount: {
+          ...(queryParams.amount.gte && {
+            gte: new Decimal(queryParams.amount.gte),
+          }),
+          ...(queryParams.amount.lte && {
+            lte: new Decimal(queryParams.amount.lte),
+          }),
+        },
+      }),
+    };
+
     const transactions = await db.transaction.findMany({
-      where: { userId: user.id, ...query },
+      where,
+      orderBy: { date: "desc" },
+      include: {
+        account: true,
+      },
     });
 
-    return { success: true, data: transactions };
+    return {
+      success: true,
+      data: serializeTransactions(transactions as unknown as Transaction[]),
+    };
   } catch (error) {
     console.error("Error fetching transactions:", error);
     return { success: false, data: [] };
+  }
+}
+
+export async function deleteTransaction(
+  id: string
+): Promise<{ success: boolean }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    const user = await db.user.findUnique({
+      where: { clerkUserId: userId },
+    });
+
+    if (!user) throw new Error("User not found");
+
+    const transaction = await db.transaction.findUnique({
+      where: { id, userId: user.id },
+      include: { account: true },
+    });
+
+    if (!transaction) throw new Error("Transaction not found");
+
+    // Reverse the balance change
+    const balanceChange =
+      transaction.type === "EXPENSE"
+        ? transaction.amount.toNumber()
+        : -transaction.amount.toNumber();
+
+    const newBalance = transaction.account.balance.toNumber() + balanceChange;
+
+    await db.$transaction(async (tx: DatabaseTransaction) => {
+      await tx.transaction.delete({
+        where: { id, userId: user.id },
+      });
+
+      await tx.account.update({
+        where: { id: transaction.accountId },
+        data: { balance: new Decimal(newBalance) },
+      });
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath(`/account/${transaction.accountId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting transaction:", error);
+    throw new Error("Failed to delete transaction");
   }
 }
 
@@ -240,7 +574,7 @@ export async function scanReceipt(file: File): Promise<ReceiptData> {
         "category": "string"
       }
 
-      If its not a recipt, return an empty object
+      If it's not a receipt, return an empty object {}
     `;
 
     const result = await model.generateContent([
@@ -259,6 +593,12 @@ export async function scanReceipt(file: File): Promise<ReceiptData> {
 
     try {
       const data = JSON.parse(cleanedText);
+
+      // Validate the response
+      if (!data.amount || !data.date || !data.description) {
+        throw new Error("Invalid receipt data extracted");
+      }
+
       return {
         amount: parseFloat(data.amount),
         date: new Date(data.date),
@@ -273,6 +613,52 @@ export async function scanReceipt(file: File): Promise<ReceiptData> {
   } catch (error) {
     console.error("Error scanning receipt:", error);
     throw new Error("Failed to scan receipt");
+  }
+}
+
+// Utility function to get transaction statistics
+export async function getTransactionStats(
+  accountId?: string
+): Promise<TransactionStatsResponse> {
+  try {
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    const user = await db.user.findUnique({
+      where: { clerkUserId: userId },
+    });
+
+    if (!user) throw new Error("User not found");
+
+    const where: TransactionWhereInput = {
+      userId: user.id,
+      ...(accountId && { accountId }),
+    };
+
+    const [income, expenses, count] = await Promise.all([
+      db.transaction.aggregate({
+        where: { ...where, type: "INCOME" },
+        _sum: { amount: true },
+      }) as Promise<TransactionAggregateResult>,
+      db.transaction.aggregate({
+        where: { ...where, type: "EXPENSE" },
+        _sum: { amount: true },
+      }) as Promise<TransactionAggregateResult>,
+      db.transaction.count({ where }),
+    ]);
+
+    const totalIncome: number = income._sum.amount?.toNumber() || 0;
+    const totalExpenses: number = expenses._sum.amount?.toNumber() || 0;
+
+    return {
+      totalIncome,
+      totalExpenses,
+      transactionCount: count,
+      balance: totalIncome - totalExpenses,
+    };
+  } catch (error) {
+    console.error("Error getting transaction stats:", error);
+    throw new Error("Failed to get transaction statistics");
   }
 }
 

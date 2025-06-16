@@ -10,3 +10,4 @@ export interface Account {
     transactions: number;
   };
 }
+export type AccountType = "CURRENT" | "SAVINGS";

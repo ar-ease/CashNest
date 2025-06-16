@@ -1,23 +1,12 @@
 import { db } from "@/lib/prisma";
 import { subDays } from "date-fns";
-import { TransactionType, TransactionStatus } from "@prisma/client";
+import { Decimal } from "@prisma/client/runtime/library";
 
 const ACCOUNT_ID = "13d85ead-1228-4751-99c9-6944209e4f82";
 const USER_ID = "5643ed10-5c76-4c49-b2db-bfa053eb4b9b";
 
-// Define types for categories
-interface CategoryItem {
-  name: string;
-  range: [number, number];
-}
-
-interface Categories {
-  INCOME: CategoryItem[];
-  EXPENSE: CategoryItem[];
-}
-
 // Categories with their typical amount ranges
-const CATEGORIES: Categories = {
+const CATEGORIES = {
   INCOME: [
     { name: "salary", range: [5000, 8000] },
     { name: "freelance", range: [1000, 3000] },
@@ -44,26 +33,14 @@ function getRandomAmount(min: number, max: number): number {
 }
 
 // Helper to get random category with amount
-function getRandomCategory(type: TransactionType) {
+function getRandomCategory(type: "INCOME" | "EXPENSE"): {
+  category: string;
+  amount: number;
+} {
   const categories = CATEGORIES[type];
   const category = categories[Math.floor(Math.random() * categories.length)];
   const amount = getRandomAmount(category.range[0], category.range[1]);
   return { category: category.name, amount };
-}
-
-// Define transaction interface
-interface TransactionData {
-  id: string;
-  type: TransactionType;
-  amount: number;
-  description: string;
-  date: Date;
-  category: string;
-  status: TransactionStatus;
-  userId: string;
-  accountId: string;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 // Define return type
@@ -76,7 +53,21 @@ interface SeedResult {
 export async function seedTransactions(): Promise<SeedResult> {
   try {
     // Generate 90 days of transactions
-    const transactions: TransactionData[] = [];
+    const transactions: Array<{
+      id: string;
+      type: "INCOME" | "EXPENSE";
+      amount: Decimal;
+      description: string;
+      date: Date;
+      category: string;
+      status: "COMPLETED";
+      userId: string;
+      accountId: string;
+      isRecurring: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+    }> = [];
+
     let totalBalance = 0;
 
     for (let i = 90; i >= 0; i--) {
@@ -86,66 +77,59 @@ export async function seedTransactions(): Promise<SeedResult> {
 
       for (let j = 0; j < transactionsPerDay; j++) {
         // 40% chance of income, 60% chance of expense
-        const type =
-          Math.random() < 0.4
-            ? TransactionType.INCOME
-            : TransactionType.EXPENSE;
-
+        const type: "INCOME" | "EXPENSE" =
+          Math.random() < 0.4 ? "INCOME" : "EXPENSE";
         const { category, amount } = getRandomCategory(type);
 
-        const transaction: TransactionData = {
+        const transaction = {
           id: crypto.randomUUID(),
           type,
-          amount,
+          amount: new Decimal(amount),
           description: `${
-            type === TransactionType.INCOME ? "Received" : "Paid for"
+            type === "INCOME" ? "Received" : "Paid for"
           } ${category}`,
           date,
           category,
-          status: TransactionStatus.COMPLETED,
+          status: "COMPLETED" as const,
           userId: USER_ID,
           accountId: ACCOUNT_ID,
+          isRecurring: false,
           createdAt: date,
           updatedAt: date,
         };
 
-        totalBalance += type === TransactionType.INCOME ? amount : -amount;
+        totalBalance += type === "INCOME" ? amount : -amount;
         transactions.push(transaction);
       }
     }
 
-    // Insert transactions in batches and update account balance
+    // Insert transactions and update account balance
     await db.$transaction(async (tx) => {
       // Clear existing transactions
       await tx.transaction.deleteMany({
         where: { accountId: ACCOUNT_ID },
       });
 
-      // Insert new transactions individually to properly handle Decimal fields
+      // Insert new transactions
       for (const transaction of transactions) {
         await tx.transaction.create({
-          data: {
-            ...transaction,
-            // Ensure Decimal fields are properly converted
-            amount: transaction.amount,
-          },
+          data: transaction,
         });
       }
 
       // Update account balance
       await tx.account.update({
         where: { id: ACCOUNT_ID },
-        data: { balance: totalBalance },
+        data: { balance: new Decimal(totalBalance) },
       });
     });
 
     return {
       success: true,
-      message: `Created ${transactions.length} transactions`,
+      message: `Created ${transactions.length} transactions with total balance: ${totalBalance}`,
     };
   } catch (error) {
     console.error("Error seeding transactions:", error);
-    // Fixed the syntax error here
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
