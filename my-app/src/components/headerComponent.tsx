@@ -6,7 +6,7 @@ import { Button } from "./ui/button";
 import { LayoutDashboard, PenBox } from "lucide-react";
 import { checkUser } from "@/lib/checkuser";
 
-export default async function Header() {
+export default async function header() {
   await checkUser();
   return (
     <>
